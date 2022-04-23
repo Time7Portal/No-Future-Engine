@@ -15,7 +15,7 @@ glfw 윈도우를 띄웠습니다.
 2022-04-24
 
 물칸을 초기화했습니다.
-
+https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
 // Hello world 삼각형을 띄웠습니다.
 
 
