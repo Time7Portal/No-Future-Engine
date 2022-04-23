@@ -6,18 +6,23 @@
 
 
 
-
 # Development log | 업데이트 내역
 
 2022-04-23
 
 glfw 윈도우를 띄웠습니다.
 
+2022-04-24
+
+물칸을 초기화했습니다.
+
+// Hello world 삼각형을 띄웠습니다.
+
 
 
 
 # References | 참고자료
 https://vulkan-tutorial.com/
-
+https://www.vulkan.org/
 
 
