@@ -8,15 +8,16 @@
 
 # Development log | 업데이트 내역
 
-2022-04-23
+### 2022-04-23
 
 glfw 윈도우를 띄웠습니다.
 
-2022-04-24
+### 2022-04-24
 
-물칸을 초기화했습니다.
+물칸을 객체를 만들고 초기화했습니다.
 
-https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
+검증 레이어를 삽입했습니다.
+
 
 
 
