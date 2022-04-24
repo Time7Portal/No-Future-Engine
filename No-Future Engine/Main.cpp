@@ -9,6 +9,7 @@
 #include <iostream>
 #include <stdexcept> // 예외처리
 #include <cstdlib> // EXIT_SUCCESS, EXIT_FAILURE 매크로
+#include <cstring> // strcmp 사용
 #include <vector>
 
 
@@ -27,19 +28,26 @@ constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검�
 #endif
 
 
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+// PFN_vkCreateDebugUtilsMessengerEXT 함수는 디버깅 정보 출력용 메신저 도구 개체를 만들때 사용하며, 안타깝게도 확장 함수이기 때문에 자동으로 로드되지 않습니다. vkGetInstanceProcAddr 를 사용하여 함수 주소를 직접 찾아야 합니다. 이를 처리하는 자체 프록시(래퍼) 함수를 만들 것입니다.
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
+{
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
+    if (func != nullptr)
+    {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
     }
-    else {
+    else
+    {
+        // 확장 함수를 로드할 수 없으면 nullptr 를 반환합니다.
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 }
-
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
+// PFN_vkDestroyDebugUtilsMessengerEXT 함수도 마찬가지로 확장 함수라서 함수 주소를 직접 받아서 사용해야 합니다. 디버깅 정보 출력용 메신저 도구 개체의 소멸을 책임집니다.
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
+{
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr) {
+    if (func != nullptr)
+    {
         func(instance, debugMessenger, pAllocator);
     }
 }
@@ -48,16 +56,19 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 class HelloTriangleApplication
 {
 private:
-    GLFWwindow* window;     // GLFW 윈도우 핸들
-    VkInstance instance;    // Vulkan 객체 핸들
-    VkDebugUtilsMessengerEXT debugMessenger;
+    GLFWwindow* window;                             // GLFW 윈도우 핸들
+    VkInstance instance;                            // Vulkan 개체 핸들
+    VkDebugUtilsMessengerEXT debugMessenger;        // 디버깅 정보 출력용 메신저 도구 핸들. 놀랍게도 Vulkan의 디버그 콜백조차도 명시적으로 생성 및 소멸되어야 하는 핸들로 관리됩니다. 이러한 콜백은 디버그 메신저 의 일부이며 원하는 만큼 가질 수 있습니다.
 
 public:
     void run()
     {
         initWindow();       // 1. GLFW 윈도우 초기화
-        initVulkan();       // 2. 불칸 객체 초기화 및 렌더링 준비
+
+        initVulkan();       // 2. 불칸 개체 초기화 및 렌더링 준비
+
         mainLoop();         // 3. 계속해서 매 프레임 렌더
+
         cleanup();          // 4. 프로그램 종료
     }
 
@@ -89,10 +100,10 @@ private:
     }
 
 
-    // 2. 불칸 객체 초기화 및 렌더링 준비
+    // 2. 불칸 개체 초기화 및 렌더링 준비
     inline void initVulkan()
     {
-        createInstance();           // 2-1. Vulkan 객체 만들기
+        createInstance();           // 2-1. Vulkan 개체 만들기
 
         /*
         createSurface();            // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
@@ -106,7 +117,7 @@ private:
     }
 
 
-    // 2-1. Vulkan 객체를 만들기
+    // 2-1. Vulkan 개체를 만들기
     inline void createInstance()
     {
         // 우선 디버그 모드라면 필요로 하는 검증 레이어를 지원하는지 확인합니다.
@@ -121,6 +132,7 @@ private:
             vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
             // 지원 가능한 검증 레이어 목록을 조회하여, 우리가 필요로 하는 검증 레이어가 전부 들어있는지 확인
+            // Checks if all of the requested layers are available.
             for (const char* layerName : validationLayers) // 우리가 필요로 하는 검증 레이어들 중
             {
                 bool layerFound = false;
@@ -169,13 +181,17 @@ private:
             std::cout << '\t' << glfwExtensions[i] << '\n';
         }
 
-        // 확장성을 위해 GLFW 표준 확장을 vector 에 넣어서 관리합니다.
+        // 확장성을 위해 GLFW 표준 확장(필수 요소들)을 우선 vector 에 넣어서 관리합니다.
         std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount); // std::vector<>(이터레이터begin, 이터레이터end)
 
         // 디버그 모드일 경우
         if (enableValidationLayers)
         {
-            // 디버깅용 확장을 추가합니다.
+            // 검증 레이어는 기본적으로 표준 디버그 메세지 출력을 제공하지만 프로그램에서 명시적 콜백을 제공하여 직접 처리할 수도 있습니다. 또한 모든 메시지가 반드시 (치명적인) 오류가 아니기 때문에 보고 싶은 메시지 종류도 결정할 수 있습니다. 메시지 및 관련 세부 정보를 처리하기 위해 프로그램에서 콜백을 설정하려면 VK_EXT_debug_utils 확장을 사용하고 콜백 함수도 등록해야 합니다.
+            // The validation layers will print debug messages to the standard output by default, but we can also handle them ourselves by providing an explicit callback in our program. This will also allow you to decide which kind of messages you would like to see, because not all are necessarily (fatal) errors. To set up a callback in the program to handle messages and the associated details, we have to set up a debug messenger with a callback using the VK_EXT_debug_utils extension.
+
+            // 디버깅용 메신저 확장을 추가합니다. VK_EXT_DEBUG_UTILS_EXTENSION_NAME 는 VK_EXT_debug_utils 와 같습니다.
+            // https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/chap50.html#VK_EXT_debug_utils
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 
@@ -191,13 +207,14 @@ private:
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
-            // 디버그 메신저도 설정하여 createInfo 에 집어넣습니다
+            // 디버그 메신저도 설정하여 createInfo 에 집어넣습니다. 이때 우리가 만든 콜백 함수를 호출할 조건들을 설정할 수 있습니다.
             debugCreateInfo = {};
             debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-            debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
             debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-            debugCreateInfo.pfnUserCallback = debugCallback;
-            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+            debugCreateInfo.pfnUserCallback = debugCallback; // 디버그 메신저가 메시지 출력을 위해 사용할 콜백 함수를 등록합니다.
+            debugCreateInfo.pUserData = nullptr; // (옵션) 콜백 함수에 전달할 필드에 대한 포인터를 선택적으로 전달할 수 있습니다. 예를 들면 이것을 사용하여 HelloTriangleApplication클래스에 대한 포인터를 전달할 수 있습니다.
+            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo; // 이 방법으로 추가 디버그 메신저를 생성하면 vkCreateInstance 할때 해당 메신저를 사용하고 vkDestroyInstance 할때 자동으로 정리됩니다.
         }
         else // 디버그 모드가 아니면 검증 레이어를 다 빼버립니다.
         {
@@ -209,25 +226,81 @@ private:
         // 이제 Vulkan이 인스턴스를 생성하는 데 필요한 모든 것을 설정했으며 마침내 vkCreateInstance호출을 실행할 수 있습니다. (VkInstanceCreateInfo 의 포인터, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백들, 불칸 인스턴스 핸들 포인터)
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create instance!");
+            throw std::runtime_error("Failed to create instance!");
         }
 
 
-        // 불칸 인스턴스를 생성한 후에 위에서 설정했던 디버깅 툴인 디버그 메신저를 활성화할 수 있습니다.
+        // 불칸 인스턴스가 정상적으로 생성된 이후에 위에서 설정했던 디버깅 툴인 디버그 메신저를 활성화할 수 있습니다. 따라서 vkCreateInstance 와 vkDestroyInstance 단계를 디버깅 할 수 없는 상황이지만, createInfo 를 설정할때 pNext 로 debugCreateInfo 핸들을 우선적으로 넘겨서 해결 하였습니다.
+        // https://github.com/KhronosGroup/Vulkan-Docs/blob/master/appendices/VK_EXT_debug_utils.txt#L120
         if (enableValidationLayers)
         {
+            // 디버그 메신저 생성을 위한 PFN_vkCreateDebugUtilsMessengerEXT 확장 함수를 사용해서 확장 개체를 만듭니다
+            // PFN_vkCreateDebugUtilsMessengerEXT 는 확장 함수이기 때문에 직접 콜이 불가능해 문서의 맨 위쪽에 만들어둔 프록시(래퍼) 함수를 대신 사용합니다.
             if (CreateDebugUtilsMessengerEXT(instance, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to set up debug messenger!");
+                throw std::runtime_error("Failed to set up debug messenger!");
             }
         }
 
     }
 
+
+    // 디버깅용 콜백 함수는 static 멤버 함수로 만들어야 하며 PFN_vkDebugUtilsMessengerCallbackEXT 의 프로토타입이어야 합니다. VKAPI_ATTR 와 VKAPI_CALL 가 함수의 시그니쳐가 올바르도록 보장하며 Vulkan이 이 함수를 콜할 수 있게 합니다. debugCallback(메세지의 심각도, 메세지의 특성, 메세지 내용, 특수 데이터 전달용)
+    // Needs to be a new static member function called debugCallback with the PFN_vkDebugUtilsMessengerCallbackEXT prototype. The VKAPI_ATTR and VKAPI_CALL ensure that the function has the right signature for Vulkan to call it.
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
     {
-        std::cerr << "@ Validation layer: " << pCallbackData->pMessage << std::endl;
-        return VK_FALSE;
+        // 심각도에 따른 검증 레이어 메세지 출력
+        if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+        {
+            // 여기에 중단점을 추가하면 쉽게 디버깅이 가능합니다.
+            std::cerr << "@ [ERROR] : " << pCallbackData->pMessage << std::endl;
+        }
+        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        {
+            std::cerr << "@ [WARNING] : " << pCallbackData->pMessage << std::endl;
+        }
+        else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+        {
+            std::cerr << "@ [NOTICE] : " << pCallbackData->pMessage << std::endl;
+        }
+        else
+        {
+            std::cerr << "@ [INFO] : " << pCallbackData->pMessage << std::endl;
+        }
+        
+        return VK_FALSE; // 디버깅용 콜백 함수는 반드시 VK_FALSE 를 반환하도록 약속되어 있습니다.
+
+        /*
+        검증 레이어는 다음과 같은 기능을 제공합니다. | Validation layer provides following things.
+        파라미터 값 오사용 감지 | Checking the values of parameters against the specification to detect misuse
+        메모리 릭 감지 | Tracking creation and destruction of objects to find resource leaks
+        스레드 안전성 확인 | Checking thread safety by tracking the threads that calls originate from
+        모든 콜과 파라미터값 출력 | Logging every call and its parameters to the standard output
+        불칸 콜 추적 | Tracing Vulkan calls for profiling and replaying
+
+        messageSeverity 플래그는 다음과 같은 정보를 제공합니다.
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT: 리소스 생성과 같은 정보 메시지
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT: 진단 메시지
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT: 버그일 가능성이 높은 동작에 대한 메시지
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT: 유효하지 않고 충돌을 일으킬 수 있는 동작에 대한 메시지
+
+        messageType 플래그는 다음과 같은 정보를 제공합니다.
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT: 사양이나 성능과 무관한 일반 이벤트가 발생한 경우
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT: 사양을 위반하거나 잘못된 동작일 가능성이 있음
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT: 잠재적으로 최적화되지 않은 Vulkan 사용 방식
+
+        pCallbackData 구조체는 다음과 같은 정보를 제공합니다.
+        pMessage: null로 끝나는 문자열로서의 디버그 메시지
+        pObjects: 메시지와 관련된 Vulkan 개체 핸들의 배열
+        objectCount: 배열의 개체 수
+
+        pUserData 보이드 포인터는 다음과 같은 정보를 제공합니다.
+        Vulkan 개체 초기화 단계에서 디버그 메신저를 설정할때 지정해둔 고유한 포인터를 그대로 전달받습니다.
+
+        더 자세한 디버깅 레이어 설정은
+        No-Future Engine\EXTERNALS\VulkanSDK_1.3.211.0\Config\vk_layer_settings.txt
+        에 나와있습니다.
+        */
     }
 
 
@@ -252,13 +325,19 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
-        // 불칸 객체를 지웁니다. (인스턴스 핸들, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백)
+        // 디버깅 정보 출력용 메신저 도구 개체를 지웁니다.
+        if (enableValidationLayers)
+        {
+            DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+        }
+
+        // 불칸 개체를 지웁니다. (인스턴스 핸들, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백)
         vkDestroyInstance(instance, nullptr);
 
         // GLFW 윈도우를 지웁니다.
         glfwDestroyWindow(window);
 
-        // GLFW 종료
+        // GLFW 를 종료합니다.
         glfwTerminate();
 
 
