@@ -61,7 +61,7 @@ struct QueueFamilyIndices
 
     bool isComplete()
     {
-        return graphicsFamily.has_value(); // graphicsFamily 에 값을 한번이라도 넣은 적이 있다면 has_value() 는 true 를 반환합니다.
+        return graphicsFamily.has_value(); // graphicsFamily 에 한번이라도 값을 넣은 적이 있다면 has_value() 는 true 를 반환합니다.
     }
 };
 
@@ -372,19 +372,11 @@ private:
     }
 
 
-    // 이 디바이스가 적합한지 확인합니다.
+    // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 물론 다양한 종류의 명령을 동시에 처리하는 큐도 있습니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
     bool isDeviceSuitable(VkPhysicalDevice device)
     {
-        QueueFamilyIndices indices = findQueueFamilies(device);
-
-        return indices.isComplete();
-    }
-
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
-    {
-        // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
-
-        QueueFamilyIndices indices;
+        // 적합한 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다.
+        std::optional<uint32_t> graphicsFamily;
 
         // 그래픽카드가 지원하는 모든 큐 패밀리 갯수와 리스트를 받아옵니다.
         uint32_t queueFamilyCount = 0;
@@ -394,17 +386,17 @@ private:
         // 이제 queueFamilies 에는 VkQueueFamilyProperties 정보들 묶음이 담겨있습니다.
 
         int i = 0;
-        // queueFamily 에는 각각의 큐 페밀리에 대한 정보가 담겨있습니다.
+        // queueFamily 에는 각각의 큐 페밀리에 대한 정보가 담겨있습니다. queueFamily 를 전부 탐색해서 우리가 원하는 큐 페밀리가 있는지 확인합니다.
         for (const auto& queueFamily : queueFamilies)
         {
-            // 지금은 그래픽 명령 큐 하나만 필요하지만 나중을 위해서 QueueFamilyIndices 인덱스 구조체로 묶었습니다.
+            // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다.
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
             {
-                indices.graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
+                graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
             }
 
-            // 이미 큐 패밀리를 찾았으므로 추가로 찾을 필요가 없습니다.
-            if (indices.isComplete())
+            // 이미 원하는 큐 패밀리를 찾았으므로 추가로 찾을 필요가 없습니다.
+            if (graphicsFamily.has_value()) // graphicsFamily 에 값을 한번이라도 넣은 적이 있다면 has_value() 는 true 를 반환합니다.
             {
                 break;
             }
@@ -412,7 +404,7 @@ private:
             i++;
         }
 
-        return indices;
+        return graphicsFamily.has_value(); // graphicsFamily 에 값을 한번도 넣은 적이 없다면 has_value() 는 false 를 반환합니다.
     }
 
 
