@@ -11,16 +11,46 @@
 #include <cstdlib> // EXIT_SUCCESS, EXIT_FAILURE 매크로
 #include <vector>
 
+
 // 윈도우 해상도
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
+
+// 검증 레이어 목록
+const std::vector<const char*> validationLayers {
+    "VK_LAYER_KHRONOS_validation", // LunarG Vulkan SDK 에서 기본적으로 제공하는 유효성 검사 레이어
+};
+#ifdef NDEBUG
+constexpr bool enableValidationLayers = false;
+#else
+constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검증 레이어 활성화
+#endif
+
+
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    }
+    else {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator) {
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
 
 
 class HelloTriangleApplication
 {
 private:
-    GLFWwindow* window; // GLFW 윈도우 핸들
-    VkInstance instance; // Vulkan 객체 핸들
+    GLFWwindow* window;     // GLFW 윈도우 핸들
+    VkInstance instance;    // Vulkan 객체 핸들
+    VkDebugUtilsMessengerEXT debugMessenger;
 
 public:
     void run()
@@ -33,7 +63,7 @@ public:
 
 private:
     // 1. GLFW 윈도우 초기화
-    void initWindow()
+    inline void initWindow()
     {
         glfwInit();
 
@@ -60,15 +90,60 @@ private:
 
 
     // 2. 불칸 객체 초기화 및 렌더링 준비
-    void initVulkan()
+    inline void initVulkan()
     {
-        createInstance();       // 2-1. Vulkan 객체 만들기
+        createInstance();           // 2-1. Vulkan 객체 만들기
+
+        /*
+        createSurface();            // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
+
+        pickPhysicalDevice();       // 2-3. 그래픽 카드 선택
+
+        createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
+
+        createCommandPool();        // 2-5. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
+        */
     }
 
 
     // 2-1. Vulkan 객체를 만들기
-    void createInstance()
+    inline void createInstance()
     {
+        // 우선 디버그 모드라면 필요로 하는 검증 레이어를 지원하는지 확인합니다.
+        if (enableValidationLayers == true)
+        {
+            // 지원 가능한 검증 레이어 갯수 가져오기
+            uint32_t layerCount;
+            vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+            // 지원 가능한 검증 레이어 목록 가져오기
+            std::vector<VkLayerProperties> availableLayers(layerCount);
+            vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+            // 지원 가능한 검증 레이어 목록을 조회하여, 우리가 필요로 하는 검증 레이어가 전부 들어있는지 확인
+            for (const char* layerName : validationLayers) // 우리가 필요로 하는 검증 레이어들 중
+            {
+                bool layerFound = false;
+                for (const auto& layerProperties : availableLayers) // 장치에서 지원 가능한 검증 레이어 목록을 조회
+                {
+                    if (strcmp(layerName, layerProperties.layerName) == 0)
+                    {
+                        // 원하는 레이어를 찾음 (그럼 이어서 다음 항목 검사)
+                        layerFound = true;
+                        break;
+                    }
+                }
+
+                // 끝까지 뒤져봤지만 필요로 하는 레이어를 못 찾았으면 에러!
+                if (!layerFound)
+                {
+                    throw std::runtime_error("validation layers requested, but not available!");
+                }
+            }
+        }
+
+
+
         // 앱에 대한 정보를 제공합니다. (필수는 아니지만 이 정보를 가지고 그래픽 드라이버가 최적화 하는데 사용하기도 합니다)
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; // 사실상 대부분의 불칸 구조체는 sType 이라는 멤버로 가지고 형식을 파악합니다. (그냥 appInfo 타입을 보고 판단하면 되는데 굳이 이렇게 만든 이유가??)
@@ -94,22 +169,74 @@ private:
             std::cout << '\t' << glfwExtensions[i] << '\n';
         }
 
-        // 활성화할 전역 유효성 검사 계층을 결정합니다.
-        createInfo.enabledExtensionCount = glfwExtensionCount;
-        createInfo.ppEnabledExtensionNames = glfwExtensions;
+        // 확장성을 위해 GLFW 표준 확장을 vector 에 넣어서 관리합니다.
+        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount); // std::vector<>(이터레이터begin, 이터레이터end)
 
-        createInfo.enabledLayerCount = 0;
+        // 디버그 모드일 경우
+        if (enableValidationLayers)
+        {
+            // 디버깅용 확장을 추가합니다.
+            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
 
-        // 이제 Vulkan이 인스턴스를 생성하는 데 필요한 모든 것을 지정했으며 마침내 vkCreateInstance호출을 실행할 수 있습니다. (VkInstanceCreateInfo 의 포인터, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백들, 불칸 인스턴스 핸들 포인터)
+        // 활성화할 전역 검증 레이어를 설정합니다. 검증 레이어는 Vulkan API를 가로채서 로깅, 프로파일링, 디버깅, 혹은 다른 추가적인 기능에 사용될 수 있습니다.
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+        createInfo.ppEnabledExtensionNames = extensions.data();
+
+        // 디버그 모드라면 디버깅을 도와주는 Vulkan 툴중 하나인 디버그 메신저를 설정합니다.
+        VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+        if (enableValidationLayers)
+        {
+            // 검증 레이어도 넣고
+            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+
+            // 디버그 메신저도 설정하여 createInfo 에 집어넣습니다
+            debugCreateInfo = {};
+            debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            debugCreateInfo.pfnUserCallback = debugCallback;
+            createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+        }
+        else // 디버그 모드가 아니면 검증 레이어를 다 빼버립니다.
+        {
+            createInfo.enabledLayerCount = 0;
+            createInfo.pNext = nullptr;
+        }
+
+
+        // 이제 Vulkan이 인스턴스를 생성하는 데 필요한 모든 것을 설정했으며 마침내 vkCreateInstance호출을 실행할 수 있습니다. (VkInstanceCreateInfo 의 포인터, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백들, 불칸 인스턴스 핸들 포인터)
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create instance!");
         }
+
+
+        // 불칸 인스턴스를 생성한 후에 위에서 설정했던 디버깅 툴인 디버그 메신저를 활성화할 수 있습니다.
+        if (enableValidationLayers)
+        {
+            if (CreateDebugUtilsMessengerEXT(instance, &debugCreateInfo, nullptr, &debugMessenger) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to set up debug messenger!");
+            }
+        }
+
+    }
+
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+    {
+        std::cerr << "@ Validation layer: " << pCallbackData->pMessage << std::endl;
+        return VK_FALSE;
     }
 
 
+
+
+
+
     // 3. 계속해서 매 프레임 렌더
-    void mainLoop()
+    inline void mainLoop()
     {
         // 사용자가 창을 닫을 때까지는 계속 이벤트 처리를 하면서 루프를 돕니다.
         while (!glfwWindowShouldClose(window))
@@ -123,7 +250,7 @@ private:
 
 
     // 4. 프로그램 종료
-    void cleanup()
+    inline void cleanup()
     {
         // 불칸 객체를 지웁니다. (인스턴스 핸들, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백)
         vkDestroyInstance(instance, nullptr);
