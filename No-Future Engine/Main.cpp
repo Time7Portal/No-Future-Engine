@@ -8,9 +8,10 @@
 
 #include <iostream>
 #include <stdexcept> // 예외처리
-#include <cstdlib> // EXIT_SUCCESS, EXIT_FAILURE 매크로
-#include <cstring> // strcmp 사용
 #include <vector>
+#include <cstring> // strcmp 사용
+#include <cstdlib> // EXIT_SUCCESS, EXIT_FAILURE 매크로
+#include <optional>
 
 
 // 윈도우 해상도
@@ -42,6 +43,7 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 }
+
 // PFN_vkDestroyDebugUtilsMessengerEXT 함수도 마찬가지로 확장 함수라서 함수 주소를 직접 받아서 사용해야 합니다. 디버깅 정보 출력용 메신저 도구 개체의 소멸을 책임집니다.
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
 {
@@ -52,13 +54,26 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
+// 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다.
+struct QueueFamilyIndices
+{
+    std::optional<uint32_t> graphicsFamily;
+
+    bool isComplete()
+    {
+        return graphicsFamily.has_value(); // graphicsFamily 에 값을 한번이라도 넣은 적이 있다면 has_value() 는 true 를 반환합니다.
+    }
+};
+
 
 class HelloTriangleApplication
 {
 private:
-    GLFWwindow* window;                             // GLFW 윈도우 핸들
-    VkInstance instance;                            // Vulkan 개체 핸들
-    VkDebugUtilsMessengerEXT debugMessenger;        // 디버깅 정보 출력용 메신저 도구 핸들. 놀랍게도 Vulkan의 디버그 콜백조차도 명시적으로 생성 및 소멸되어야 하는 핸들로 관리됩니다. 이러한 콜백은 디버그 메신저 의 일부이며 원하는 만큼 가질 수 있습니다.
+    GLFWwindow* window;                                 // GLFW 윈도우 핸들
+    VkInstance instance;                                // Vulkan 개체 핸들
+    VkDebugUtilsMessengerEXT debugMessenger;            // 디버깅 정보 출력용 메신저 도구 핸들. 놀랍게도 Vulkan의 디버그 콜백조차도 명시적으로 생성 및 소멸되어야 하는 핸들로 관리됩니다. 이러한 콜백은 디버그 메신저 의 일부이며 원하는 만큼 가질 수 있습니다.
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;   // 선택된 그래픽카드 디바이스 핸들. vkInstance 와 함께 자동으로 소멸됩니다.
+
 
 public:
     void run()
@@ -105,15 +120,13 @@ private:
     {
         createInstance();           // 2-1. Vulkan 개체 만들기
 
-        /*
-        createSurface();            // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
+        // createSurface();            // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
 
         pickPhysicalDevice();       // 2-3. 그래픽 카드 선택
 
-        createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
+        //createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
 
-        createCommandPool();        // 2-5. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
-        */
+        //createCommandPool();        // 2-5. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
     }
 
 
@@ -261,7 +274,7 @@ private:
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
         {
-            std::cerr << "@ [NOTICE] : " << pCallbackData->pMessage << std::endl;
+            //std::cerr << "@ [NOTICE] : " << pCallbackData->pMessage << std::endl;
         }
         else
         {
@@ -302,9 +315,105 @@ private:
         에 나와있습니다.
         */
     }
+    
+
+    // 2-3. 그래픽 카드 선택
+    void pickPhysicalDevice()
+    {
+        // 우선 Vulkan을 지원하는 그래픽카드 갯수를 받아옵니다.
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+        // Vulkan을 지원하는 그래픽카드가 하나도 없으면 에러!
+        if (deviceCount == 0)
+        {
+            throw std::runtime_error("Failed to find GPUs with Vulkan support!");
+        }
+
+        // 그래픽카드 리스트를 전부 받아옵니다.
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+        for (const auto& device : devices)
+        {
+            // 해당 그래픽카드가 우리가 수행할 작업에 적합한지 조사합니다.
+            if (isDeviceSuitable(device))
+            {
+                // 적합한 그래픽카드를 하나 찾았으면 핸들에 보관해두고 더이상 탐색하지 않습니다.
+                physicalDevice = device;
+                break;
+            }
+        }
+
+        // 요구사항을 만족하는 그래픽카드를 찾지 못했을 경우
+        if (physicalDevice == VK_NULL_HANDLE)
+        {
+            // 에러를 반환하고 프로그램을 종료합니다!
+            throw std::runtime_error("Failed to find a suitable GPU!");
+        }
+
+        // 찾은 그래픽카드 정보를 모아서 출력합니다.
+        // 이름, 유형 및 지원되는 Vulkan 버전과 같은 기본 장치 속성 등 | Basic device properties like the name, type and supported Vulkan version
+        VkPhysicalDeviceProperties deviceProperties;
+        vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+        // 텍스처 압축, 64비트 부동 소수점 및 다중 뷰포트 렌더링(VR에 유용)과 같은 선택적 기능에 대한 지원 등 | Optional features like texture compression, 64 bit floats and multi viewport rendering (useful for VR)
+        VkPhysicalDeviceFeatures deviceFeatures;
+        vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
+
+        std::cout << "Suitable device found : \n";
+        std::cout << '\t' << "deviceName: " << deviceProperties.deviceName << '\n';
+        std::cout << '\t' << "deviceID: " << deviceProperties.deviceID << '\n';
+        std::cout << '\t' << "apiVersion: " << deviceProperties.apiVersion << '\n';
+        std::cout << '\t' << "deviceType: " << deviceProperties.deviceType << '\n'; // 내장형 GPU = 1 외장형 GPU = 2
+        std::cout << '\t' << "driverVersion: " << deviceProperties.driverVersion << '\n';
+        std::cout << '\t' << "maxImageDimension2D: " << deviceProperties.limits.maxImageDimension2D << '\n';
+        std::cout << '\t' << "tessellationShader supported: " << deviceFeatures.tessellationShader << '\n';
+        std::cout << '\t' << "geometryShader supported: " << deviceFeatures.geometryShader << '\n';
+    }
 
 
+    // 이 디바이스가 적합한지 확인합니다.
+    bool isDeviceSuitable(VkPhysicalDevice device)
+    {
+        QueueFamilyIndices indices = findQueueFamilies(device);
 
+        return indices.isComplete();
+    }
+
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+    {
+        // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
+
+        QueueFamilyIndices indices;
+
+        // 그래픽카드가 지원하는 모든 큐 패밀리 갯수와 리스트를 받아옵니다.
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+        // 이제 queueFamilies 에는 VkQueueFamilyProperties 정보들 묶음이 담겨있습니다.
+
+        int i = 0;
+        // queueFamily 에는 각각의 큐 페밀리에 대한 정보가 담겨있습니다.
+        for (const auto& queueFamily : queueFamilies)
+        {
+            // 지금은 그래픽 명령 큐 하나만 필요하지만 나중을 위해서 QueueFamilyIndices 인덱스 구조체로 묶었습니다.
+            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            {
+                indices.graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
+            }
+
+            // 이미 큐 패밀리를 찾았으므로 추가로 찾을 필요가 없습니다.
+            if (indices.isComplete())
+            {
+                break;
+            }
+
+            i++;
+        }
+
+        return indices;
+    }
 
 
 
