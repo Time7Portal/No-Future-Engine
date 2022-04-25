@@ -162,7 +162,8 @@ private:
                 // 끝까지 뒤져봤지만 필요로 하는 레이어를 못 찾았으면 에러!
                 if (!layerFound)
                 {
-                    throw std::runtime_error("validation layers requested, but not available!");
+                    // 다른 노트북으로 테스트 해보니 그래픽카드가 Vulkan 을 지원하더라도 Vulakn SDK 가 설치되어 있지 않으면 Validation layer 가 없다는 것을 알았습니다. 그래서 에러 문구를 센스있게 바꿨습니다.
+                    throw std::runtime_error("Validation layers requested, but not available! - Did you install Vulakn SDK?");
                 }
             }
         }
