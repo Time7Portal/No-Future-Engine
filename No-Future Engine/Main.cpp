@@ -73,6 +73,8 @@ private:
     VkInstance instance;                                // Vulkan 개체 핸들
     VkDebugUtilsMessengerEXT debugMessenger;            // 디버깅 정보 출력용 메신저 도구 핸들. 놀랍게도 Vulkan의 디버그 콜백조차도 명시적으로 생성 및 소멸되어야 하는 핸들로 관리됩니다. 이러한 콜백은 디버그 메신저 의 일부이며 원하는 만큼 가질 수 있습니다.
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;   // 선택된 그래픽카드 디바이스 핸들. vkInstance 와 함께 자동으로 소멸됩니다.
+    VkDevice device;                                    // 논리적 디바이스 핸들. 그래픽카드와 통신하기 위한 인터페이스 입니다. 하나의 그래픽카드에 여러개의 논리적 디바이스를 만들 수도 있습니다.
+    VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 논리적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
 
 
 public:
@@ -124,7 +126,7 @@ private:
 
         pickPhysicalDevice();       // 2-3. 그래픽 카드 선택
 
-        //createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
+        createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
 
         //createCommandPool();        // 2-5. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
     }
@@ -337,8 +339,10 @@ private:
 
         for (const auto& device : devices)
         {
-            // 해당 그래픽카드가 우리가 수행할 작업에 적합한지 조사합니다.
-            if (isDeviceSuitable(device))
+            // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
+            std::optional<uint32_t> graphicsFamily = findQueueFamilies(device);
+
+            if (graphicsFamily.has_value() == true) // 원하는 큐 패밀리가 들어있다면
             {
                 // 적합한 그래픽카드를 하나 찾았으면 핸들에 보관해두고 더이상 탐색하지 않습니다.
                 physicalDevice = device;
@@ -374,9 +378,10 @@ private:
 
 
     // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 물론 다양한 종류의 명령을 동시에 처리하는 큐도 있습니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
-    bool isDeviceSuitable(VkPhysicalDevice device)
+    std::optional<uint32_t> findQueueFamilies(VkPhysicalDevice device)
     {
-        // 적합한 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다.
+        // graphicsFamily 에는 그래픽카드가 해당 큐 패밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
+        // 적합한 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다. https://modoocode.com/309
         std::optional<uint32_t> graphicsFamily;
 
         // 그래픽카드가 지원하는 모든 큐 패밀리 갯수와 리스트를 받아옵니다.
@@ -397,7 +402,7 @@ private:
             }
 
             // 이미 원하는 큐 패밀리를 찾았으므로 추가로 찾을 필요가 없습니다.
-            if (graphicsFamily.has_value()) // graphicsFamily 에 값을 한번이라도 넣은 적이 있다면 has_value() 는 true 를 반환합니다.
+            if (graphicsFamily.has_value()) // graphicsFamily 에 값을 한번이라도 넣은 적이 있다면 graphicsFamily.has_value() 는 true 를 반환합니다.
             {
                 break;
             }
@@ -405,9 +410,65 @@ private:
             i++;
         }
 
-        return graphicsFamily.has_value(); // graphicsFamily 에 값을 한번도 넣은 적이 없다면 has_value() 는 false 를 반환합니다.
+        return graphicsFamily; // 지원하는 큐 페밀리의 인덱스 번호를 담고 있습니다. 또한, graphicsFamily 에 값을 한번도 넣은 적이 없다면 (지원하는 큐 페밀리를 찾지 못한 경우) graphicsFamily.has_value() 는 false 를 반환합니다.
     }
 
+
+    // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
+    void createLogicalDevice()
+    {
+        // graphicsFamily 에는 그래픽카드가 해당 큐 패밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
+        std::optional<uint32_t> graphicsFamily = findQueueFamilies(physicalDevice);
+
+        // 2-4-1. 하나의 큐 패밀리 안에서 사용할 큐의 갯수를 설정합니다. 지금은 그래픽스 큐 하나만 달라고 요청하겠습니다. 사실 큐는 그렇게 많이 필요하지 않으며, 일반적으로 1개면 충분합니다. 왜냐하면 커멘드 버퍼들을 멀티 스레드로 많이 만든 후에 큐로 제출할때는 메인 스레드에서 한번에 모아 하나의 큐로 묶어 제출하기 때문입니다. Vulkan에서 큐는 커맨드 버퍼를 그래픽카드에 공급하는 매체 역할을 합니다.
+        VkDeviceQueueCreateInfo queueCreateInfo{};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = graphicsFamily.value();
+        queueCreateInfo.queueCount = 1;
+
+        // 큐의 우선순위를 0.1 ~ 1 스케일로 할당할 수 있습니다. 하나의 큐만 사용하더라도 반드시 지정해야 합니다. 1.0f 는 우선순위가 가장 높음을 의미합니다.
+        float queuePriority = 1.0f;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+
+
+        // 2-4-2. 우리가 사용할 장치의 기능들을 정의합니다. 장치에서 지원하는 모든 기능들은 vkGetPhysicalDeviceFeatures 로 확인 가능합니다. 사실상 지금은 아무런 기능들도 사용하지 않으므로 모든 설정값을 기본(VK_FALSE)으로 두겠습니다.
+        VkPhysicalDeviceFeatures deviceFeatures{};
+
+
+        // 2-4-3. 이제 논리 장치를 만듭니다. 논리 장치를 만들때 위에서 미리 만들어둔 VkDeviceQueueCreateInfo, VkPhysicalDeviceFeatures 두개의 설정값을 사용합니다.
+        VkDeviceCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
+        createInfo.queueCreateInfoCount = 1;
+
+        // 불칸 인스턴스 생성과 마찬가지로 확장과 검증 레이어를 명시해야 합니다. 예를들어 이미지를 윈도우에 렌더링하도록 도와주는 VK_KHR_swapchain 확장은 비트코인 채굴용 그래픽카드에서는 제공하지 않고 단지 컴퓨트 연산만 제공할 수도 있습니다.
+        createInfo.pEnabledFeatures = &deviceFeatures;
+
+        createInfo.enabledExtensionCount = 0;
+
+        // 초창기 불칸에서는 인스턴스와 디바이스 전용 검증 레이어를 분리해서 다뤘지만 현재는 인스턴스에만 적용하면 모든 검증을 다 할 수 있도록 바뀌었습니다. 때문에 최신버전의 Vulkan 에서 VkDeviceCreateInfo 의 enabledLayerCount 와 ppEnabledLayerNames 항목은 사실상 무의미해졌지만 구버전 호환성을 위해 불칸 인스턴스 생성때와 동일한 검증 레이어를 집어넣었습니다.
+        if (enableValidationLayers)
+        {
+            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+        }
+        else {
+            createInfo.enabledLayerCount = 0;
+        }
+
+        // 이제 논리적 디바이스를 만들기 위한 설정들을 모두 마쳤으며, 논리적 디바이스를 생성할 수 있습니다. vkCreateDevice(사용할 그래픽카드, 논리 장치를 만들기 위한 설정값 포인터, 얼로케이션 콜백 포인터, 논리적 디바이스 핸들을 저장할 변수에 대한 포인터)
+        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
+        {
+            // 존재하지 않는 확장을 활성화하거나 지원되지 않는 기능을 사용하면 논리적 디바이스 생성에 실패하고 에러를 반환합니다!
+            throw std::runtime_error("Failed to create logical device!");
+        }
+
+        // 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. vkGetDeviceQueue(논리적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
+        vkGetDeviceQueue(device, graphicsFamily.value(), 0, &graphicsQueue);
+
+        // 이제 논리적 디바이스와 큐 핸들을 사용하여 실제로 그래픽 카드에 명령을 때려넣어 작업을 시작할 수 있습니다.
+    }
 
 
     // 3. 계속해서 매 프레임 렌더
@@ -427,6 +488,9 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 
+        vkDestroyDevice(device, nullptr);
+
         // 디버깅 정보 출력용 메신저 도구 개체를 지웁니다.
         if (enableValidationLayers)
         {
