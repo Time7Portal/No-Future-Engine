@@ -79,13 +79,13 @@ private:
     GLFWwindow* window;                                 // GLFW 윈도우 핸들
     VkInstance instance;                                // Vulkan 개체 핸들
     VkDebugUtilsMessengerEXT debugMessenger;            // 디버깅 정보 출력용 메신저 도구 핸들. 놀랍게도 Vulkan의 디버그 콜백조차도 명시적으로 생성 및 소멸되어야 하는 핸들로 관리됩니다. 이러한 콜백은 디버그 메신저 의 일부이며 원하는 만큼 가질 수 있습니다.
-    VkSurfaceKHR surface;                               // WSI 서피스 핸들
+    VkSurfaceKHR surface;                               // 추상적 화면 객체 핸들. 이 개체는 플랫폼(Windows, Linux, Android 등)에 독립적으로 화면을 관리할 수 있도록 도와줍니다. 우리 프로그램은 GLFW 로 생성한 화면을 이용합니다.
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;   // 선택된 그래픽카드 디바이스 핸들. vkInstance 와 함께 자동으로 소멸됩니다.
-    VkDevice device;                                    // 논리적 디바이스 핸들. 그래픽카드와 통신하기 위한 인터페이스 입니다. 하나의 그래픽카드에 여러개의 논리적 디바이스를 만들 수도 있습니다.
+    VkDevice device;                                    // 추상적 디바이스 핸들. 그래픽카드와 통신하기 위한 인터페이스 입니다. 하나의 그래픽카드에 여러개의 추상적 디바이스를 만들 수도 있습니다.
 
-    VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 논리적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
-    VkQueue presentQueue;                               // 
+    VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 추상적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
+    VkQueue presentQueue;                               // 프레젠테이션 큐 핸들. 화면에 결과물을 보여주기 위해 사용됩니다.
 
 
 public:
@@ -176,7 +176,7 @@ private:
                 if (!layerFound)
                 {
                     // 다른 노트북으로 테스트 해보니 그래픽카드가 Vulkan 을 지원하더라도 Vulakn SDK 가 설치되어 있지 않으면 Validation layer 가 없다는 것을 알았습니다. 그래서 에러 문구를 센스있게 바꿨습니다.
-                    throw std::runtime_error("Validation layers requested, but not available! - Did you install Vulakn SDK?");
+                    throw std::runtime_error("Validation layers requested, but not available! - Did you install Vulkan SDK?");
                 }
             }
         }
@@ -333,8 +333,9 @@ private:
 
 
     // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
-    void createSurface()
+    inline void createSurface()
     {
+        // Vulkan은 플랫폼에 구애받지 않는 API이므로 자체적으로 창 시스템과 직접 인터페이스할 수 없습니다. Vulkan과 윈도우 시스템 간의 연결을 설정하여 결과를 화면에 표시하려면 WSI(Window System Integration) 확장을 사용해야 합니다. surface 개채를 생성하기 위해선 VK_KHR_surface 확장이 필요한데 이미 GLFW 에서 제공하는 glfwGetRequiredInstanceExtensions 를 통해 해당 확장을 열었으므로 안심해도 됩니다. surface 는 사용할 그래픽카드 선택에 따라 영향을 받을 수 있으므로 불칸 인스턴스 생성 직후에 생성해야 합니다. OpenGL 과는 다르게 화면 구성은 Vulkan 에선 단지 선택적 요소입니다. 지금은 윈도우 환경이므로 glfwCreateWindowSurface 를 호출하면 GLFW 내부적으로 알아서 VkWin32SurfaceCreateInfoKHR 로 윈도우 서피스를 만들고 VK_KHR_win32_surface 확장을 사용하여 윈도우의 HWND 와 HMODULE 를 처리할 것입니다. glfwCreateWindowSurface(VkInstance, GLFW window pointer, custom allocators, pointer to VkSurfaceKHR handle)
         if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create window surface!");
@@ -344,7 +345,7 @@ private:
 
 
     // 2-3. 그래픽 카드 선택
-    void pickPhysicalDevice()
+    inline void pickPhysicalDevice()
     {
         // 우선 Vulkan을 지원하는 그래픽카드 갯수를 받아옵니다.
         uint32_t deviceCount = 0;
@@ -401,7 +402,7 @@ private:
 
 
     // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 물론 다양한 종류의 명령을 동시에 처리하는 큐도 있습니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+    inline QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
     {
         // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
         QueueFamilyIndices indices;
@@ -423,10 +424,11 @@ private:
                 indices.graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
             }
 
-            // @@
+            // @@ queueFamily 를 사용하지도 않는데 아래 코드는 꼭 반복문 안에 있어야 하는건가?? i 값 사용 때문에 그런 것 같기도..
+            // 서피스에 이미지를 표시할 수 있는 큐 패밀리가 있는지 검사합니다. 보통은 그리기와 화면 표시가 동시에 지원되는 큐 페밀리가 있지만 (그런경우 i 값이 동일하게 저장될 것입니다), 각각 따로 존재할 수도 있습니다 (이런 경우 성능이 떨어집니다).
             VkBool32 presentSupport = false;
+            // 특이하게 생성된 추상적 서피스 개체를 사용하고 프레젠테이션을 지원할 수 있는 그래픽스 큐를 검색 하려면 queueFamily.queueFlags 가 아닌vkGetPhysicalDeviceSurfaceSupportKHR 라고 따로 존재하는 함수를 사용해야 한다.
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-
             if (presentSupport)
             {
                 indices.presentFamily = i;
@@ -439,6 +441,7 @@ private:
                 break;
             }
 
+            // 큐 패밀리에는 다수의 큐가 있을 수 있다. 이때 큐 패밀리 내의 각각의 큐는 유일한 인덱스 값으로 구분된다.
             i++;
         }
 
@@ -448,11 +451,12 @@ private:
 
 
     // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
-    void createLogicalDevice()
+    inline void createLogicalDevice()
     {
         // graphicsFamily 에는 그래픽카드가 해당 큐 패밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
+        // 필요한 큐 페밀리가 많이질 것 같으므로 우아하게 각 큐 페밀리에 대한 설정값들을 set 을 만들어 관리하겠습니다.
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         std::set<uint32_t> uniqueQueueFamilies = {
             indices.graphicsFamily.value(), 
@@ -462,7 +466,7 @@ private:
         // 각각의 큐 패밀리를 위해 만든 queueCreateInfo 정보들을 벡터 리스트로 저장합니다.
         for (uint32_t queueFamily : uniqueQueueFamilies)
         {
-            // 2-4-1. 하나의 큐 패밀리 안에서 사용할 큐의 갯수를 설정합니다. 지금은 그래픽스 큐 하나만 달라고 요청하겠습니다. 사실 큐는 그렇게 많이 필요하지 않으며, 일반적으로 1개면 충분합니다. 왜냐하면 커멘드 버퍼들을 멀티 스레드로 많이 만든 후에 큐로 제출할때는 메인 스레드에서 한번에 모아 하나의 큐로 묶어 제출하기 때문입니다. Vulkan에서 큐는 커맨드 버퍼를 그래픽카드에 공급하는 매체 역할을 합니다.
+            // 2-4-1. 하나의 큐 패밀리 안에서 사용할 큐의 갯수를 설정합니다. 지금은 그래픽스 큐, 프레젠트 큐 하나씩을 달라고 요청하고 있습니다. 사실 큐는 그렇게 많이 필요하지 않으며, 일반적으로 1개면 충분합니다. 왜냐하면 커멘드 버퍼들을 멀티 스레드로 많이 만든 후에 큐로 제출할때는 메인 스레드에서 한번에 모아 하나의 큐로 묶어 제출하기 때문입니다. Vulkan에서 큐는 커맨드 버퍼를 그래픽카드에 공급하는 매체 역할을 합니다.
             VkDeviceQueueCreateInfo queueCreateInfo{};
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.queueFamilyIndex = queueFamily;
@@ -480,11 +484,11 @@ private:
         VkPhysicalDeviceFeatures deviceFeatures{};
 
 
-        // 2-4-3. 이제 논리 장치를 만듭니다. 논리 장치를 만들때 위에서 미리 만들어둔 VkDeviceQueueCreateInfo, VkPhysicalDeviceFeatures 두개의 설정값을 사용합니다.
+        // 2-4-3. 이제 논리 장치를 만듭니다. 논리 장치를 만들때 위에서 미리 만들어둔 VkDeviceQueueCreateInfo, VkPhysicalDeviceFeatures 두개의 설정값들을 사용합니다.
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
-        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()); // queueCreateInfo 의 갯수를 설정합니다.
         createInfo.pQueueCreateInfos = queueCreateInfos.data(); // 이렇게 쓰면 queueCreateInfos 를 C 스타일 배열처럼 만들어 포인터를 반환합니다.
         
 
@@ -503,18 +507,18 @@ private:
             createInfo.enabledLayerCount = 0;
         }
 
-        // 이제 논리적 디바이스를 만들기 위한 설정들을 모두 마쳤으며, 논리적 디바이스를 생성할 수 있습니다. vkCreateDevice(사용할 그래픽카드, 논리 장치를 만들기 위한 설정값 포인터, 얼로케이션 콜백 포인터, 논리적 디바이스 핸들을 저장할 변수에 대한 포인터)
+        // 이제 추상적 디바이스를 만들기 위한 설정들을 모두 마쳤으며, 추상적 디바이스를 생성할 수 있습니다. vkCreateDevice(사용할 그래픽카드, 논리 장치를 만들기 위한 설정값 포인터, 얼로케이션 콜백 포인터, 추상적 디바이스 핸들을 저장할 변수에 대한 포인터)
         if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
         {
-            // 존재하지 않는 확장을 활성화하거나 지원되지 않는 기능을 사용하면 논리적 디바이스 생성에 실패하고 에러를 반환합니다!
+            // 존재하지 않는 확장을 활성화하거나 지원되지 않는 기능을 사용하면 추상적 디바이스 생성에 실패하고 에러를 반환합니다!
             throw std::runtime_error("Failed to create logical device!");
         }
 
-        // 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. vkGetDeviceQueue(논리적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
+        // 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. 큐 패밀리가 동일한 경우 graphicsQueue 와 presentQueue 핸들은 동일한 값을 가질 가능성이 높습니다. 대기열 패밀리가 동일한게 확실한 경우 해당 인덱스를 한 번만 전달해도 됩니다. vkGetDeviceQueue(추상적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
         vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 
-        // 이제 논리적 디바이스와 큐 핸들을 사용하여 실제로 그래픽 카드에 명령을 때려넣어 작업을 시작할 수 있습니다.
+        // 이제 추상적 디바이스와 큐 핸들을 사용하여 실제로 그래픽 카드에 명령을 때려넣어 작업을 시작할 수 있습니다.
     }
 
 
@@ -535,7 +539,7 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
-        // 
+        // 추상적 디바이스를 지웁니다.
         vkDestroyDevice(device, nullptr);
 
         // 디버깅 정보 출력용 메신저 도구 개체를 지웁니다.
@@ -589,7 +593,7 @@ int main()
 // To-do list | 삼각형 하나 그릴려면 앞으로 해야할 일
 Create a VkInstance
 Select a supported graphics card(VkPhysicalDevice)
-Create a VkDeviceand VkQueue for drawingand presentation
+Create a VkDeviceand VkQueue for drawing and presentation
 Create a window, window surfaceand swap chain
 Wrap the swap chain images into VkImageView
 Create a render pass that specifies the render targets and usage
