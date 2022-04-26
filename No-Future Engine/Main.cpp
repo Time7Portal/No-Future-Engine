@@ -12,6 +12,7 @@
 #include <cstring> // strcmp 사용
 #include <cstdlib> // EXIT_SUCCESS, EXIT_FAILURE 매크로
 #include <optional>
+#include <set>
 
 
 // 윈도우 해상도
@@ -54,14 +55,20 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
-// 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다.
+// 그래픽카드가 필요한 큐 패밀리를 지원하는지 한꺼번에 정리해서 검사하기 위한 구조체
 struct QueueFamilyIndices
 {
+    // graphicsFamily 에는 그래픽카드가 해당 큐 패밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
+        // 적합한 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다. https://modoocode.com/309
     std::optional<uint32_t> graphicsFamily;
+    // 
+    std::optional<uint32_t> presentFamily;
 
+    // 이 함수를 호출해서 우리가 원하는 모든 패밀리를 얻었는지 확인할 수 있습니다.
     bool isComplete()
     {
-        return graphicsFamily.has_value(); // graphicsFamily 에 한번이라도 값을 넣은 적이 있다면 has_value() 는 true 를 반환합니다.
+        // graphicsFamily 에 한번이라도 값을 넣은 적이 있다면 has_value() 는 true 를 반환합니다.
+        return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
@@ -72,9 +79,13 @@ private:
     GLFWwindow* window;                                 // GLFW 윈도우 핸들
     VkInstance instance;                                // Vulkan 개체 핸들
     VkDebugUtilsMessengerEXT debugMessenger;            // 디버깅 정보 출력용 메신저 도구 핸들. 놀랍게도 Vulkan의 디버그 콜백조차도 명시적으로 생성 및 소멸되어야 하는 핸들로 관리됩니다. 이러한 콜백은 디버그 메신저 의 일부이며 원하는 만큼 가질 수 있습니다.
+    VkSurfaceKHR surface;                               // WSI 서피스 핸들
+
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;   // 선택된 그래픽카드 디바이스 핸들. vkInstance 와 함께 자동으로 소멸됩니다.
     VkDevice device;                                    // 논리적 디바이스 핸들. 그래픽카드와 통신하기 위한 인터페이스 입니다. 하나의 그래픽카드에 여러개의 논리적 디바이스를 만들 수도 있습니다.
+
     VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 논리적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
+    VkQueue presentQueue;                               // 
 
 
 public:
@@ -122,7 +133,7 @@ private:
     {
         createInstance();           // 2-1. Vulkan 개체 만들기
 
-        // createSurface();            // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
+        createSurface();            // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
 
         pickPhysicalDevice();       // 2-3. 그래픽 카드 선택
 
@@ -320,6 +331,18 @@ private:
     }
     
 
+
+    // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
+    void createSurface()
+    {
+        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create window surface!");
+        }
+    }
+
+
+
     // 2-3. 그래픽 카드 선택
     void pickPhysicalDevice()
     {
@@ -340,9 +363,9 @@ private:
         for (const auto& device : devices)
         {
             // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
-            std::optional<uint32_t> graphicsFamily = findQueueFamilies(device);
+            QueueFamilyIndices indices = findQueueFamilies(device);
 
-            if (graphicsFamily.has_value() == true) // 원하는 큐 패밀리가 들어있다면
+            if (indices.graphicsFamily.has_value() == true) // 원하는 큐 패밀리가 들어있다면
             {
                 // 적합한 그래픽카드를 하나 찾았으면 핸들에 보관해두고 더이상 탐색하지 않습니다.
                 physicalDevice = device;
@@ -378,11 +401,10 @@ private:
 
 
     // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 물론 다양한 종류의 명령을 동시에 처리하는 큐도 있습니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
-    std::optional<uint32_t> findQueueFamilies(VkPhysicalDevice device)
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
     {
-        // graphicsFamily 에는 그래픽카드가 해당 큐 패밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
-        // 적합한 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다. https://modoocode.com/309
-        std::optional<uint32_t> graphicsFamily;
+        // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
+        QueueFamilyIndices indices;
 
         // 그래픽카드가 지원하는 모든 큐 패밀리 갯수와 리스트를 받아옵니다.
         uint32_t queueFamilyCount = 0;
@@ -398,11 +420,21 @@ private:
             // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다.
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
             {
-                graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
+                indices.graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
             }
 
-            // 이미 원하는 큐 패밀리를 찾았으므로 추가로 찾을 필요가 없습니다.
-            if (graphicsFamily.has_value()) // graphicsFamily 에 값을 한번이라도 넣은 적이 있다면 graphicsFamily.has_value() 는 true 를 반환합니다.
+            // @@
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+
+            if (presentSupport)
+            {
+                indices.presentFamily = i;
+            }
+
+
+            // 이미 원하는 모든 큐 패밀리를 찾았으므로 추가로 찾을 필요가 없습니다.
+            if (indices.isComplete())
             {
                 break;
             }
@@ -410,7 +442,8 @@ private:
             i++;
         }
 
-        return graphicsFamily; // 지원하는 큐 페밀리의 인덱스 번호를 담고 있습니다. 또한, graphicsFamily 에 값을 한번도 넣은 적이 없다면 (지원하는 큐 페밀리를 찾지 못한 경우) graphicsFamily.has_value() 는 false 를 반환합니다.
+        // 지원하는 큐 페밀리의 인덱스 번호들을 담고 있습니다.
+        return indices;
     }
 
 
@@ -418,18 +451,30 @@ private:
     void createLogicalDevice()
     {
         // graphicsFamily 에는 그래픽카드가 해당 큐 패밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
-        std::optional<uint32_t> graphicsFamily = findQueueFamilies(physicalDevice);
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
-        // 2-4-1. 하나의 큐 패밀리 안에서 사용할 큐의 갯수를 설정합니다. 지금은 그래픽스 큐 하나만 달라고 요청하겠습니다. 사실 큐는 그렇게 많이 필요하지 않으며, 일반적으로 1개면 충분합니다. 왜냐하면 커멘드 버퍼들을 멀티 스레드로 많이 만든 후에 큐로 제출할때는 메인 스레드에서 한번에 모아 하나의 큐로 묶어 제출하기 때문입니다. Vulkan에서 큐는 커맨드 버퍼를 그래픽카드에 공급하는 매체 역할을 합니다.
-        VkDeviceQueueCreateInfo queueCreateInfo{};
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = graphicsFamily.value();
-        queueCreateInfo.queueCount = 1;
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::set<uint32_t> uniqueQueueFamilies = {
+            indices.graphicsFamily.value(), 
+            indices.presentFamily.value(), 
+        };
 
-        // 큐의 우선순위를 0.1 ~ 1 스케일로 할당할 수 있습니다. 하나의 큐만 사용하더라도 반드시 지정해야 합니다. 1.0f 는 우선순위가 가장 높음을 의미합니다.
-        float queuePriority = 1.0f;
-        queueCreateInfo.pQueuePriorities = &queuePriority;
+        // 각각의 큐 패밀리를 위해 만든 queueCreateInfo 정보들을 벡터 리스트로 저장합니다.
+        for (uint32_t queueFamily : uniqueQueueFamilies)
+        {
+            // 2-4-1. 하나의 큐 패밀리 안에서 사용할 큐의 갯수를 설정합니다. 지금은 그래픽스 큐 하나만 달라고 요청하겠습니다. 사실 큐는 그렇게 많이 필요하지 않으며, 일반적으로 1개면 충분합니다. 왜냐하면 커멘드 버퍼들을 멀티 스레드로 많이 만든 후에 큐로 제출할때는 메인 스레드에서 한번에 모아 하나의 큐로 묶어 제출하기 때문입니다. Vulkan에서 큐는 커맨드 버퍼를 그래픽카드에 공급하는 매체 역할을 합니다.
+            VkDeviceQueueCreateInfo queueCreateInfo{};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = queueFamily;
+            queueCreateInfo.queueCount = 1;
 
+            // 큐의 우선순위를 0.1 ~ 1 스케일로 할당할 수 있습니다. 하나의 큐만 사용하더라도 반드시 지정해야 합니다. 1.0f 는 우선순위가 가장 높음을 의미합니다.
+            static float queuePriority = 1.0f;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+
+            queueCreateInfos.push_back(queueCreateInfo);
+        }
+        
 
         // 2-4-2. 우리가 사용할 장치의 기능들을 정의합니다. 장치에서 지원하는 모든 기능들은 vkGetPhysicalDeviceFeatures 로 확인 가능합니다. 사실상 지금은 아무런 기능들도 사용하지 않으므로 모든 설정값을 기본(VK_FALSE)으로 두겠습니다.
         VkPhysicalDeviceFeatures deviceFeatures{};
@@ -439,8 +484,9 @@ private:
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
-        createInfo.pQueueCreateInfos = &queueCreateInfo;
-        createInfo.queueCreateInfoCount = 1;
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+        createInfo.pQueueCreateInfos = queueCreateInfos.data(); // 이렇게 쓰면 queueCreateInfos 를 C 스타일 배열처럼 만들어 포인터를 반환합니다.
+        
 
         // 불칸 인스턴스 생성과 마찬가지로 확장과 검증 레이어를 명시해야 합니다. 예를들어 이미지를 윈도우에 렌더링하도록 도와주는 VK_KHR_swapchain 확장은 비트코인 채굴용 그래픽카드에서는 제공하지 않고 단지 컴퓨트 연산만 제공할 수도 있습니다.
         createInfo.pEnabledFeatures = &deviceFeatures;
@@ -465,7 +511,8 @@ private:
         }
 
         // 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. vkGetDeviceQueue(논리적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
-        vkGetDeviceQueue(device, graphicsFamily.value(), 0, &graphicsQueue);
+        vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+        vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 
         // 이제 논리적 디바이스와 큐 핸들을 사용하여 실제로 그래픽 카드에 명령을 때려넣어 작업을 시작할 수 있습니다.
     }
@@ -496,6 +543,9 @@ private:
         {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
+
+        // 
+        vkDestroySurfaceKHR(instance, surface, nullptr);
 
         // 불칸 개체를 지웁니다. (인스턴스 핸들, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백)
         vkDestroyInstance(instance, nullptr);
