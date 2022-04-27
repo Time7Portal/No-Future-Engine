@@ -6,13 +6,16 @@
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
 
-#include <iostream>
-#include <stdexcept> // 예외처리
-#include <vector>
-#include <cstring> // strcmp 사용
-#include <cstdlib> // EXIT_SUCCESS, EXIT_FAILURE 매크로
-#include <optional>
-#include <set>
+#include <iostream>         // 
+#include <stdexcept>        // 예외처리
+#include <algorithm>        // 
+#include <vector>           // 
+#include <cstring>          // strcmp 사용
+#include <cstdlib>          // EXIT_SUCCESS, EXIT_FAILURE 매크로
+#include <cstdint>          // 
+#include <limits>           // 
+#include <optional>         // 그래픽카드가 해당 큐 패밀리를 지원하는지 여부 검사
+#include <set>              // 사용할 모든 큐 패밀리 셋을 모아서 관리
 
 
 // 윈도우 해상도
@@ -23,6 +26,12 @@ constexpr uint32_t HEIGHT = 600;
 const std::vector<const char*> validationLayers {
     "VK_LAYER_KHRONOS_validation", // LunarG Vulkan SDK 에서 기본적으로 제공하는 유효성 검사 레이어
 };
+
+// 
+const std::vector<const char*> deviceExtensions {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
 #ifdef NDEBUG
 constexpr bool enableValidationLayers = false;
 #else
@@ -72,6 +81,14 @@ struct QueueFamilyIndices
     }
 };
 
+// 
+struct SwapChainSupportDetails
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+};
+
 
 class HelloTriangleApplication
 {
@@ -87,6 +104,10 @@ private:
     VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 추상적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
     VkQueue presentQueue;                               // 프레젠테이션 큐 핸들. 화면에 결과물을 보여주기 위해 사용됩니다.
 
+    VkSwapchainKHR swapChain;                           //
+    std::vector<VkImage> swapChainImages;               //
+    VkFormat swapChainImageFormat;                      //
+    VkExtent2D swapChainExtent;                         //
 
 public:
     void run()
@@ -139,7 +160,22 @@ private:
 
         createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
 
-        //createCommandPool();        // 2-5. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
+        createSwapChain();          // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑체인 규약 생성
+
+        //createImageViews();         // 2-6. 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
+
+        //createRenderPass();         // 2-7.
+
+        //createGraphicsPipeline();   // 2-8.
+
+        //createFramebuffers();       // 2-9.
+
+        //createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
+
+        //createCommandBuffers();     // 
+
+        //createSyncObjects();        // 
+
     }
 
 
@@ -363,10 +399,26 @@ private:
 
         for (const auto& device : devices)
         {
-            // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
-            QueueFamilyIndices indices = findQueueFamilies(device);
+            // 우리가 사용할 그래픽카드가 필요한 큐 패밀리, 확장, 스왑체인을 가지고 있는지 검사하는 함수가 필요합니다. 함수가 멀리 떨어져 있으면 가독성을 해칠 수 있어서 isDeviceSuitable 이라는 static 람다함수로 만들었습니다.
+            static auto isDeviceSuitable = [=](VkPhysicalDevice device) -> bool
+            {
+                // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
+                QueueFamilyIndices indices = findQueueFamilies(device);
 
-            if (indices.graphicsFamily.has_value() == true) // 원하는 큐 패밀리가 들어있다면
+                bool extensionsSupported = checkDeviceExtensionSupport(device);
+
+                bool swapChainAdequate = false;
+                if (extensionsSupported)
+                {
+                    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+                    swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+                }
+
+                return indices.isComplete() && extensionsSupported && swapChainAdequate;
+            };
+
+            // 원하는 큐 패밀리가 들어있다면
+            if (isDeviceSuitable(device) == true) 
             {
                 // 적합한 그래픽카드를 하나 찾았으면 핸들에 보관해두고 더이상 탐색하지 않습니다.
                 physicalDevice = device;
@@ -495,7 +547,9 @@ private:
         // 불칸 인스턴스 생성과 마찬가지로 확장과 검증 레이어를 명시해야 합니다. 예를들어 이미지를 윈도우에 렌더링하도록 도와주는 VK_KHR_swapchain 확장은 비트코인 채굴용 그래픽카드에서는 제공하지 않고 단지 컴퓨트 연산만 제공할 수도 있습니다.
         createInfo.pEnabledFeatures = &deviceFeatures;
 
-        createInfo.enabledExtensionCount = 0;
+        // 
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
         // 초창기 불칸에서는 인스턴스와 디바이스 전용 검증 레이어를 분리해서 다뤘지만 현재는 인스턴스에만 적용하면 모든 검증을 다 할 수 있도록 바뀌었습니다. 때문에 최신버전의 Vulkan 에서 VkDeviceCreateInfo 의 enabledLayerCount 와 ppEnabledLayerNames 항목은 사실상 무의미해졌지만 구버전 호환성을 위해 불칸 인스턴스 생성때와 동일한 검증 레이어를 집어넣었습니다.
         if (enableValidationLayers)
@@ -522,6 +576,162 @@ private:
     }
 
 
+
+    // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑체인 규약 생성
+    inline void createSwapChain()
+    {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+
+        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+        VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+        if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
+        {
+            imageCount = swapChainSupport.capabilities.maxImageCount;
+        }
+
+        VkSwapchainCreateInfoKHR createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        createInfo.surface = surface;
+
+        createInfo.minImageCount = imageCount;
+        createInfo.imageFormat = surfaceFormat.format;
+        createInfo.imageColorSpace = surfaceFormat.colorSpace;
+        createInfo.imageExtent = extent;
+        createInfo.imageArrayLayers = 1;
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+        if (indices.graphicsFamily != indices.presentFamily) {
+            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            createInfo.queueFamilyIndexCount = 2;
+            createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        }
+        else {
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        }
+
+        createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        createInfo.presentMode = presentMode;
+        createInfo.clipped = VK_TRUE;
+
+        createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create swap chain!");
+        }
+
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
+        swapChainImages.resize(imageCount);
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
+
+        swapChainImageFormat = surfaceFormat.format;
+        swapChainExtent = extent;
+    }
+
+
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
+    {
+        for (const auto& availableFormat : availableFormats)
+        {
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            {
+                return availableFormat;
+            }
+        }
+
+        return availableFormats[0];
+    }
+
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+    {
+        for (const auto& availablePresentMode : availablePresentModes)
+        {
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+            {
+                return availablePresentMode;
+            }
+        }
+
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
+    {
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+        {
+            return capabilities.currentExtent;
+        }
+        else
+        {
+            int width, height;
+            glfwGetFramebufferSize(window, &width, &height);
+
+            VkExtent2D actualExtent = {
+                static_cast<uint32_t>(width),
+                static_cast<uint32_t>(height)
+            };
+
+            actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+            return actualExtent;
+        }
+    }
+
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
+    {
+        SwapChainSupportDetails details;
+
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+        uint32_t formatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+
+        if (formatCount != 0)
+        {
+            details.formats.resize(formatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+        }
+
+        uint32_t presentModeCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+
+        if (presentModeCount != 0)
+        {
+            details.presentModes.resize(presentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+        }
+
+        return details;
+    }
+
+
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+    {
+        uint32_t extensionCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+        for (const auto& extension : availableExtensions)
+        {
+            requiredExtensions.erase(extension.extensionName);
+        }
+
+        return requiredExtensions.empty();
+    }
+
+
     // 3. 계속해서 매 프레임 렌더
     inline void mainLoop()
     {
@@ -539,6 +749,9 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
+
         // 추상적 디바이스를 지웁니다.
         vkDestroyDevice(device, nullptr);
 
