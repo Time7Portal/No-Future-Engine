@@ -105,9 +105,12 @@ private:
     VkQueue presentQueue;                               // 프레젠테이션 큐 핸들. 화면에 결과물을 보여주기 위해 사용됩니다.
 
     VkSwapchainKHR swapChain;                           // 불칸은 기본 프레임버퍼라는 개념이 없으므로 화면에 렌더링 하기 전에 이 버퍼를 소유할 인프라가 필요하며 이 인프라를 스왑 체인이라고 합니다. 스왑 체인은 기본적으로 화면에 표기되기를 기다리는 이미지 큐입니다. 응용 프로그램은 랜더링할 이미지를 다 그리면 이 큐에 넣습니다. 스왑 체인의 일반적인 목적은 이미지 표시를 화면의 새로 고침 빈도와 동기화하는 것입니다. 사실 프레젠테이션 큐가 지원되는 그래픽 카드에서는 스왑 체인 확장 기능도 반드시 지원할 것입니다.
-    std::vector<VkImage> swapChainImages;               // 이제 스왑 체인이 생성되었으므로 남은 것은 그 안에 있는 VkImages의 핸들을 받는 것입니다. 렌더링 작업 중에 이를 참조할 것입니다. 이미지는 스왑 체인 구현과 함께 생성하며 스왑 체인이 파괴되면 자동으로 소멸됩니다.
+    std::vector<VkImage> swapChainImages;               // 이제 스왑 체인이 생성되었으므로 남은 것은 그 안에 있는 스왑 체인용 이미지들(VkImages) 의 핸들을 받는 것입니다. 렌더링 작업 중에 이를 참조할 것입니다. 이미지는 스왑 체인 구현과 함께 생성하며 스왑 체인이 파괴되면 자동으로 소멸됩니다.
     VkFormat swapChainImageFormat;                      // 지정한 스왑 체인 이미지 형식
     VkExtent2D swapChainExtent;                         // 지정한 스왑 체인 이미지 크기
+
+    std::vector<VkImageView> swapChainImageViews;       // 
+
 
 public:
     void run()
@@ -160,9 +163,9 @@ private:
 
         createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
 
-        createSwapChain();          // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 버퍼 생성
-
-        //createImageViews();         // 2-6. 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
+        createSwapChain();          // 2-5. 이미지 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 생성
+       
+        createImageViews();         // 2-6. 스왑 체인용 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
 
         //createRenderPass();         // 2-7.
 
@@ -606,7 +609,7 @@ private:
 
 
 
-    // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 버퍼 생성
+    // 2-5. 이미지 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 생성
     inline void createSwapChain()
     {
         // 스왑 체인이 사용 가능한지 확인하는 것만으로는 충분하지 않습니다. 실제로 창 표면과 호환되지 않을 수 있기 때문입니다. 스왑 체인을 생성하려면 인스턴스 및 장치 생성보다 훨씬 더 많은 설정이 필요하므로 계속 진행하기 전에 더 디테일한 기능들이 사용 가능한지 확인해야 합니다.
@@ -785,6 +788,45 @@ private:
 
 
 
+    // 2-6. 스왑 체인용 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
+    void createImageViews()
+    {
+        // 스왑 체인을 포함하여 모든 VkImage 이미지 개체는 렌더 파이프라인에서 이미지 사용 방식인 VkImageView 개체를 만들어야 이미지를 사용할 수 있습니다. 이미지 사용 방식의 예는 2D 텍스쳐를 밉맵핑 없이 단순 뎁스 맵으로 인식하게 하는 것 등이 있습니다. 지금으로썬 createImageViews() 는 스왑 체인의 모든 이미지들에 대해 칼라 타겟으로 사용하는 가장 기본적인 이미지 뷰를 제공합니다.
+
+        // 스왑 체인용 이미지 뷰(사용 방식)을 정의하기 위해 모든 스왑 체인 이미지를 순회합니다.
+        swapChainImageViews.resize(swapChainImages.size());
+
+        for (size_t i = 0; i < swapChainImages.size(); i++)
+        {
+            // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
+            VkImageViewCreateInfo createInfo{};
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            createInfo.image = swapChainImages[i];
+            // viewType 과 format 은 어떻게 이미지 데이터가 해석될지 지정합니다.
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; // 1D, 2D, 3D 텍스쳐나 큐브 맵도 될 수 있습니다.
+            createInfo.format = swapChainImageFormat;
+            // components 설정값을 사용하면 RGBA 색상 채널을 GGBA 처럼 막 섞을 수 있습니다. 예를 들어 모노크롬 텍스처의 경우 모든 채널을 빨간색 채널에 매핑할 수 있습니다. - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkComponentSwizzle.html
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            // subresourceRange는 이미지의 목적이 무엇이며 액세스해야 하는 이미지 부분을 설명합니다. 우리의 이미지는 밉매핑 레벨이나 다중 레이어 없이 색상 대상으로 사용됩니다.
+            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 칼라 타겟으로 사용
+            createInfo.subresourceRange.baseMipLevel = 0; // 밉맵 없음
+            createInfo.subresourceRange.levelCount = 1; // 밉맵 계층 갯수
+            // 스테레오그래픽 3D 응용 프로그램에서는 여러 레이어가 있는 스왑 체인을 만들 것입니다. 그런 다음 다른 레이어에 액세스하여 왼쪽 및 오른쪽 눈의 보기를 나타내는 각 이미지에 대해 여러 이미지 뷰를 만들 수 있습니다.
+            createInfo.subresourceRange.baseArrayLayer = 0; // 뷰에 보여질 첫번째 배열 레이어
+            createInfo.subresourceRange.layerCount = 1; // 배열 레이어 수
+
+            // 이미지 뷰 개체를 만들고 핸들을 받습니다.
+            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create image views!");
+            }
+        }
+    }
+
+
 
     // 3. 계속해서 매 프레임 렌더
     inline void mainLoop()
@@ -803,6 +845,12 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 이미지와 달리 이미지 뷰는 명시적으로 생성되었으므로 프로그램 종료 시 전부 지워야 합니다
+        for (auto imageView : swapChainImageViews)
+        {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+
         // 스왑 체인 개체를 지웁니다.
         vkDestroySwapchainKHR(device, swapChain, nullptr);
 
