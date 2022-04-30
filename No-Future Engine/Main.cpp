@@ -17,6 +17,8 @@
 #include <optional>         // 그래픽카드가 해당 큐 패밀리를 지원하는지 여부 검사
 #include <set>              // 사용할 모든 큐 패밀리 셋을 모아서 관리
 
+#define HELPER_FUNCTION inline    // 코드 가독성을 위해 핼퍼 함수 표시용
+
 
 // 윈도우 해상도
 constexpr uint32_t WIDTH = 800;
@@ -29,9 +31,10 @@ const std::vector<const char*> validationLayers {
 
 // 필요한 확장 기능 목록
 const std::vector<const char*> deviceExtensions {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME // 모든 그래픽 카드가 화면 출력을 지원하지는 않으므로 불칸은 스왑 체인을 확장 기능으로 만들었습니다. VK_KHR_swapchain 을 장치가 지원하는지 확인하고 이 확장을 추가해야 합니다.
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME, // 모든 그래픽 카드가 화면 출력을 지원하지는 않으므로 불칸은 스왑 체인을 확장 기능으로 만들었습니다. VK_KHR_swapchain 을 장치가 지원하는지 확인하고 이 확장을 추가해야 합니다.
 };
 
+// 디버그 관련
 #ifdef NDEBUG
 constexpr bool enableValidationLayers = false;
 #else
@@ -40,7 +43,7 @@ constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검�
 
 
 // PFN_vkCreateDebugUtilsMessengerEXT 함수는 디버깅 정보 출력용 메신저 도구 개체를 만들때 사용하며, 안타깝게도 확장 함수이기 때문에 자동으로 로드되지 않습니다. vkGetInstanceProcAddr 를 사용하여 함수 주소를 직접 찾아야 합니다. 이를 처리하는 자체 프록시(래퍼) 함수를 만들 것입니다.
-inline VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
+HELPER_FUNCTION VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr)
@@ -54,8 +57,9 @@ inline VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugU
     }
 }
 
+
 // PFN_vkDestroyDebugUtilsMessengerEXT 함수도 마찬가지로 확장 함수라서 함수 주소를 직접 받아서 사용해야 합니다. 디버깅 정보 출력용 메신저 도구 개체의 소멸을 책임집니다.
-inline void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
+HELPER_FUNCTION void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
 {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr)
@@ -64,13 +68,14 @@ inline void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
+
 // 그래픽카드가 필요한 큐 패밀리를 지원하는지 한꺼번에 정리해서 검사하기 위한 구조체
 struct QueueFamilyIndices
 {
+    // 적합한 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다. https://modoocode.com/309
     // graphicsFamily 에는 그래픽카드가 해당 큐 패밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
-        // 적합한 큐 패밀리가 존재하지 않음을 매직 넘버 (예를들어 0) 으로 표현하는 것은 불가능하므로 C++17 문법중에 std::optional 을 사용하여 값이 존재하거나 존재하지 않음을 표현하였습니다. std::optional 는 무언가를 할당하기 전에는 값을 가지지 않습니다. https://modoocode.com/309
     std::optional<uint32_t> graphicsFamily;
-    // 
+    // presentFamily 에는 그래픽카드가 해당 프레젠테이션 큐 페밀리를 지원하는지 여부와 지원한다면 해당 큐 페밀리의 인덱스 번호를 담고 있습니다.
     std::optional<uint32_t> presentFamily;
 
     // 이 함수를 호출해서 우리가 원하는 모든 패밀리를 얻었는지 확인할 수 있습니다.
@@ -81,6 +86,7 @@ struct QueueFamilyIndices
     }
 };
 
+
 // 스왑 체인을 사용하려면 기본적으로 확인해야 하는 세 가지 유형의 속성이 있습니다.
 struct SwapChainSupportDetails
 {
@@ -90,6 +96,8 @@ struct SwapChainSupportDetails
 };
 
 
+
+// 실제 어플리케이션 클래스
 class HelloTriangleApplication
 {
 private:
@@ -109,7 +117,8 @@ private:
     VkFormat swapChainImageFormat;                      // 지정한 스왑 체인 이미지 형식
     VkExtent2D swapChainExtent;                         // 지정한 스왑 체인 이미지 크기
 
-    std::vector<VkImageView> swapChainImageViews;       // 
+    std::vector<VkImageView> swapChainImageViews;       // 스왑 체인용 이미지 뷰들의 핸들 모음
+
 
 
 public:
@@ -123,6 +132,8 @@ public:
 
         cleanup();          // 4. 프로그램 종료
     }
+
+
 
 private:
     // 1. GLFW 윈도우 초기화
@@ -152,6 +163,7 @@ private:
     }
 
 
+
     // 2. 불칸 개체 초기화 및 렌더링 준비
     inline void initVulkan()
     {
@@ -175,11 +187,12 @@ private:
 
         //createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        //createCommandBuffers();     // 
+        //createCommandBuffers();     // 2-11. 
 
-        //createSyncObjects();        // 
+        //createSyncObjects();        // 2-12. 
 
     }
+
 
 
     // 2-1. Vulkan 개체를 만들기
@@ -196,12 +209,11 @@ private:
             std::vector<VkLayerProperties> availableLayers(layerCount);
             vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
-            // 지원 가능한 검증 레이어 목록을 조회하여, 우리가 필요로 하는 검증 레이어가 전부 들어있는지 확인
-            // Checks if all of the requested layers are available.
+            // 지원 가능한 검증 레이어 목록을 조회하여, 필요로 하는 검증 레이어가 전부 들어있는지 확인합니다. | Checks if all of the requested layers are available.
             for (const char* layerName : validationLayers) // 우리가 필요로 하는 검증 레이어들 중
             {
                 bool layerFound = false;
-                for (const auto& layerProperties : availableLayers) // 장치에서 지원 가능한 검증 레이어 목록을 조회
+                for (const auto& layerProperties : availableLayers) // 장치에서 지원 가능한 검증 레이어 목록을 조회합니다.
                 {
                     if (strcmp(layerName, layerProperties.layerName) == 0)
                     {
@@ -220,9 +232,7 @@ private:
             }
         }
 
-
-
-        // 앱에 대한 정보를 제공합니다. (필수는 아니지만 이 정보를 가지고 그래픽 드라이버가 최적화 하는데 사용하기도 합니다)
+        // 앱에 대한 정보를 제공합니다. (필수는 아니지만 이 정보를 가지고 그래픽 드라이버가 최적화 하는데 사용하기도 합니다.)
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; // 사실상 대부분의 불칸 구조체는 sType 이라는 멤버로 가지고 형식을 파악합니다. (그냥 appInfo 타입을 보고 판단하면 되는데 굳이 이렇게 만든 이유가??)
         appInfo.pApplicationName = "Hello Triangle"; // 앱 이름
@@ -273,7 +283,7 @@ private:
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
-            // 디버그 메신저도 설정하여 createInfo 에 집어넣습니다. 이때 우리가 만든 콜백 함수를 호출할 조건들을 필터링할 수 있습니다.
+            // 디버그 메신저도 설정하여 createInfo 에 집어넣습니다. 이때 우리가 만든 디버그 콜백 함수를 호출할 조건들을 필터링할 수 있습니다.
             debugCreateInfo = {};
             debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
             debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -295,7 +305,6 @@ private:
             throw std::runtime_error("Failed to create instance!");
         }
 
-
         // 불칸 인스턴스가 정상적으로 생성된 이후에 위에서 설정했던 디버깅 툴인 디버그 메신저를 활성화할 수 있습니다. 따라서 vkCreateInstance 와 vkDestroyInstance 단계를 디버깅 할 수 없는 상황이지만, createInfo 를 설정할때 pNext 로 debugCreateInfo 핸들을 우선적으로 넘겨서 해결 하였습니다.
         // https://github.com/KhronosGroup/Vulkan-Docs/blob/master/appendices/VK_EXT_debug_utils.txt#L120
         if (enableValidationLayers)
@@ -307,13 +316,13 @@ private:
                 throw std::runtime_error("Failed to set up debug messenger!");
             }
         }
-
     }
+
 
 
     // 디버깅용 콜백 함수는 static 멤버 함수로 만들어야 하며 PFN_vkDebugUtilsMessengerCallbackEXT 의 프로토타입이어야 합니다. VKAPI_ATTR 와 VKAPI_CALL 가 함수의 시그니쳐가 올바르도록 보장하며 Vulkan이 이 함수를 콜할 수 있게 합니다. debugCallback(메세지의 심각도, 메세지의 특성, 메세지 내용, 특수 데이터 전달용)
     // Needs to be a new static member function called debugCallback with the PFN_vkDebugUtilsMessengerCallbackEXT prototype. The VKAPI_ATTR and VKAPI_CALL ensure that the function has the right signature for Vulkan to call it.
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+    HELPER_FUNCTION static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
     {
         // 심각도에 따른 검증 레이어 메세지 출력
         if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
@@ -324,7 +333,7 @@ private:
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
         {
-            std::cerr << "@ [WARNING] : " << pCallbackData->pMessage << std::endl;
+            std::cerr << "\033[1;33m" << "@ [WARNING] : " << pCallbackData->pMessage << "\033[0m\n" << std::endl;
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
         {
@@ -387,7 +396,7 @@ private:
     // 2-3. 그래픽 카드 선택
     inline void pickPhysicalDevice()
     {
-        // 우선 Vulkan을 지원하는 그래픽카드 갯수를 받아옵니다.
+        // 2-3-1. 우선 Vulkan을 지원하는 그래픽카드 갯수를 받아옵니다.
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
 
@@ -401,18 +410,37 @@ private:
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
+        // 요구사항을 만족하는 그래픽카드가 존재하는지 확인합니다.
         for (const auto& device : devices)
         {
             // 우리가 사용할 그래픽카드가 필요한 큐 패밀리, 확장, 스왑체인을 가지고 있는지 검사하는 함수가 필요합니다. 함수가 멀리 떨어져 있으면 가독성을 해칠 수 있어서 isDeviceSuitable 이라는 static 람다함수로 만들었습니다.
             static auto isDeviceSuitable = [&](VkPhysicalDevice device) -> bool
             {
-                // 해당 그래픽카드가 필요한 큐 패밀리를 모두 지원하는지 확인해야 합니다.
+                // 2-3-2. 해당 그래픽카드가 필요한 큐 패밀리를 모두 지원하는지 확인해야 합니다.
                 QueueFamilyIndices indices = findQueueFamilies(device);
 
-                // 해당 그래픽카드가 필요한 확장 기능들을 모두 지원하는지 확인해야 합니다.
-                bool extensionsSupported = checkDeviceExtensionSupport(device);
 
-                // 해당 그래픽카드가 필요한 스왑 체인 기능들을 모두 지원하는지 확인해야 합니다.
+                // 2-3-3. 해당 그래픽카드가 필요한 확장 기능들을 모두 지원하는지 확인해야 합니다. 그래픽카드가 우리가 필요로 하는 모든 확장 기능들을 지원하는지 확인하고 그런 경우 extensionsSupported 에 true 를 저장합니다.
+                // 우선 그래픽카드가 지원하는 확장 기능 갯수를 먼저 받아옵니다.
+                uint32_t extensionCount;
+                vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+                // 받아온 확장 기능 갯수를 사용해 이번엔 그래픽카드가 지원하는 모든 확장 기능 리스트를 받아옵니다.
+                std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+                vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+                // requiredExtensions 는 확인이 필요한 필요한 확장 기능 체크리스트 입니다. 그래픽카드가 지원하는 모든 확장 기능 리스트를 순회하면서 우리가 필요로 하는 확장 기능들을 전부 지원하는지 하나씩 지워나가며 확인할 것입니다.
+                std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+                for (const auto& extension : availableExtensions)
+                {
+                    requiredExtensions.erase(extension.extensionName);
+                }
+
+                // 필요한 모든 확장 기능들이 모두 지워졌으면 (모두 확인되었으면) extensionsSupported 에 true 를 저장합니다.
+                bool extensionsSupported = requiredExtensions.empty();
+
+
+                // 2-3-4. 해당 그래픽카드가 필요한 스왑 체인 기능들을 모두 지원하는지 확인해야 합니다.
                 bool swapChainAdequate = false;
                 if (extensionsSupported)
                 {
@@ -421,14 +449,16 @@ private:
                     swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
                 }
 
-                // 그래픽카드가 우리가 필요로 하는 모든 기능들을 제공함을 확인하였습니다.
+
+                // 2-3-5. 그래픽카드가 우리가 필요로 하는 모든 기능들을 제공함을 확인하였습니다.
                 return indices.isComplete() && extensionsSupported && swapChainAdequate;
             };
 
-            // 원하는 큐 패밀리가 들어있다면
+
+            // 우리가 사용할 그래픽카드가 필요한 큐 패밀리, 확장, 스왑체인을 전부 지원한다면
             if (isDeviceSuitable(device) == true) 
             {
-                // 적합한 그래픽카드를 하나 찾았으면 핸들에 보관해두고 더이상 탐색하지 않습니다.
+                // 적합한 그래픽카드를 하나 찾았으므로 핸들에 보관해두고 더이상 탐색하지 않습니다.
                 physicalDevice = device;
                 break;
             }
@@ -441,7 +471,7 @@ private:
             throw std::runtime_error("Failed to find a suitable GPU!");
         }
 
-        // 찾은 그래픽카드 정보를 모아서 출력합니다.
+        // 2-3-6. 찾은 그래픽카드 정보를 모아서 출력합니다.
         // 이름, 유형 및 지원되는 Vulkan 버전과 같은 기본 장치 속성 등 | Basic device properties like the name, type and supported Vulkan version
         VkPhysicalDeviceProperties deviceProperties;
         vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
@@ -461,8 +491,9 @@ private:
     }
 
 
+
     // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 물론 다양한 종류의 명령을 동시에 처리하는 큐도 있습니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
-    inline QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+    HELPER_FUNCTION QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
     {
         // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
         QueueFamilyIndices indices;
@@ -507,29 +538,6 @@ private:
 
         // 지원하는 큐 페밀리의 인덱스 번호들을 담고 있습니다.
         return indices;
-    }
-
-
-    // 그래픽카드가 우리가 필요로 하는 모든 확장 기능들을 지원하는지 확인하고 그런 경우 true 를 반환하는 함수입니다.
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
-    {
-        // 우선 그래픽카드가 지원하는 확장 기능 갯수를 먼저 받아옵니다.
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
-        // 받아온 확장 기능 갯수를 사용해 이번엔 그래픽카드가 지원하는 모든 확장 기능 리스트를 받아옵니다.
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-        // 아직 확인되지 않은 필요 확장 기능 리스트. 그래픽카드가 지원하는 모든 확장 기능 리스트를 순회하면서 우리가 필요로 하는 확장 기능들을 전부 지원하는지 하나씩 지워나가며 확인할 것입니다.
-        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-
-        for (const auto& extension : availableExtensions)
-        {
-            requiredExtensions.erase(extension.extensionName);
-        }
-
-        return requiredExtensions.empty();
     }
 
 
@@ -593,14 +601,16 @@ private:
             createInfo.enabledLayerCount = 0;
         }
 
-        // 이제 추상적 디바이스를 만들기 위한 설정들을 모두 마쳤으며, 추상적 디바이스를 생성할 수 있습니다. vkCreateDevice(사용할 그래픽카드, 논리 장치를 만들기 위한 설정값 포인터, 얼로케이션 콜백 포인터, 추상적 디바이스 핸들을 저장할 변수에 대한 포인터)
+
+        // 2-4-4. 이제 추상적 디바이스를 만들기 위한 설정들을 모두 마쳤으며, 추상적 디바이스를 생성할 수 있습니다. vkCreateDevice(사용할 그래픽카드, 논리 장치를 만들기 위한 설정값 포인터, 얼로케이션 콜백 포인터, 추상적 디바이스 핸들을 저장할 변수에 대한 포인터)
         if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
         {
             // 존재하지 않는 확장을 활성화하거나 지원되지 않는 기능을 사용하면 추상적 디바이스 생성에 실패하고 에러를 반환합니다!
             throw std::runtime_error("Failed to create logical device!");
         }
 
-        // 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. 큐 패밀리가 동일한 경우 graphicsQueue 와 presentQueue 핸들은 동일한 값을 가질 가능성이 높습니다. 대기열 패밀리가 동일한게 확실한 경우 해당 인덱스를 한 번만 전달해도 됩니다. vkGetDeviceQueue(추상적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
+
+        // 2-4-5. 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. 큐 패밀리가 동일한 경우 graphicsQueue 와 presentQueue 핸들은 동일한 값을 가질 가능성이 높습니다. 대기열 패밀리가 동일한게 확실한 경우 해당 인덱스를 한 번만 전달해도 됩니다. vkGetDeviceQueue(추상적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
         vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 
@@ -612,14 +622,15 @@ private:
     // 2-5. 이미지 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 생성
     inline void createSwapChain()
     {
-        // 스왑 체인이 사용 가능한지 확인하는 것만으로는 충분하지 않습니다. 실제로 창 표면과 호환되지 않을 수 있기 때문입니다. 스왑 체인을 생성하려면 인스턴스 및 장치 생성보다 훨씬 더 많은 설정이 필요하므로 계속 진행하기 전에 더 디테일한 기능들이 사용 가능한지 확인해야 합니다.
+        // 2-5-1. 스왑 체인이 사용 가능한지 확인하는 것만으로는 충분하지 않습니다. 실제로 창 표면과 호환되지 않을 수 있기 때문입니다. 스왑 체인을 생성하려면 인스턴스 및 장치 생성보다 훨씬 더 많은 설정이 필요하므로 계속 진행하기 전에 더 디테일한 기능들이 사용 가능한지 확인해야 합니다.
         // 스왑 체인을 사용하려면 기본적으로 확인해야 하는 세 가지 유형의 속성이 있습니다.
         // 1) 기본 서피스 기능 (스왑 체인의 최소/최대 이미지 수, 이미지의 최소/최대 너비 및 높이)
         // 2) 서피스 형식 (픽셀 형식, 색 공간)
         // 3) 사용 가능한 프레젠테이션 모드
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
-        // 그래픽카드가 스왑 체인을 사용할 수 있다는 것이 확인되면, 스왑 체인을 우리가 원하는 최상의 환경으로 설정해야 합니다.
+
+        // 2-5-2. 그래픽카드가 스왑 체인을 사용할 수 있다는 것이 확인되면, 스왑 체인을 우리가 원하는 최상의 환경으로 설정해야 합니다.
         // 결정할 세 가지 유형의 속성이 있습니다.
         // 1) 서피스 형식 (색상 깊이)
         // 2) 프레젠테이션 모드 (이미지를 화면으로 "교체"하기 위한 조건)
@@ -628,7 +639,8 @@ private:
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-        // 스왑 체인에 포함할 이미지 수를 결정해야 합니다. 구현은 작동하는 데 필요한 최소 수를 지정합니다. 단순히 최소값을 사용하면 렌더링할 이미지를 얻기 위해 드라이버가 내부 작업을 완료할 때까지 기다려야 할 수도 있음을 의미합니다. 따라서 최소 이미지 갯수보다 하나 이상의 이미지 갯수를 사용하는 것이 좋습니다.
+
+        // 2-5-3. 스왑 체인에 포함할 이미지 수를 결정해야 합니다. 구현은 작동하는 데 필요한 최소 수를 지정합니다. 단순히 최소값을 사용하면 렌더링할 이미지를 얻기 위해 드라이버가 내부 작업을 완료할 때까지 기다려야 할 수도 있음을 의미합니다. 따라서 최소 이미지 갯수보다 하나 이상의 이미지 갯수를 사용하는 것이 좋습니다.
         uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
         // 또한, 위에서 최소 이미지 갯수 + 1 을 했지만 지원하는 최대 이미지 갯수를 초과하지 않도록 해야 합니다. 여기서 0 은 최대값이 없음을 의미하는 특수 값입니다.
         if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
@@ -648,7 +660,8 @@ private:
         createInfo.imageArrayLayers = 1; // 양안 3D 렌더링을 하지 않는 이상 이미지 레이어 수는 항상 1 입니다.
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // 스왑 체인에서 어떤 연산으로 이미지를 사용할 지 지정합니다. 우리는 이미지를 이용해서 바로 렌더링을 할 것이므로 COLOR_ATTACHMENT 로 사용합니다. 나중에 포스트-프로세싱 이펙트 같은 것들을 위해 이 값을 VK_IMAGE_USAGE_TRANSFER_DST_BIT 로 설정하여 메모리 연산을 이용해 최종 스왑 체인 이미지로 전송할 수도 있습니다.
 
-        // 다음으로, 여러 큐 패밀리에서 사용될 스왑 체인 이미지를 처리하는 방법을 지정해야 합니다. 현재 애플리케이션의 경우 그래픽 큐 패밀리와 프레젠테이션 큐 페밀리가 다르게 사용됩니다. 따라서 그래픽 큐에서 스왑 체인의 이미지를 그린 다음 프레젠테이션 큐에 제출합니다.
+
+        // 2-5-4. 다음으로, 여러 큐 패밀리에서 사용될 스왑 체인 이미지를 처리하는 방법을 지정해야 합니다. 현재 애플리케이션의 경우 그래픽 큐 패밀리와 프레젠테이션 큐 페밀리가 다르게 사용됩니다. 따라서 그래픽 큐에서 스왑 체인의 이미지를 그린 다음 프레젠테이션 큐에 제출합니다.
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
         uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
@@ -677,13 +690,15 @@ private:
         // Vulkan을 사용하면 애플리케이션이 실행되는 동안 스왑 체인이 유효하지 않거나 최적화되지 않을 수 있습니다. 예를 들어 창 크기가 조정된 경우 스왑 체인은 실제로 처음부터 다시 만들어야 하며 이전 체인에 대한 참조를 이 필드에 지정해야 합니다.
         createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-        // 이제 스왑 체인을 만들고 핸들을 얻습니다!
+
+        // 2-5-5. 이제 스왑 체인을 만들고 핸들을 얻습니다!
         if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create swap chain!");
         }
 
-        // 스왑 체인이 만들어졌으면 불칸에서 우리가 설정해둔 만큼 스왑 체인용 이미지도 같이 만들어줄 것입니다. 위에서 그래픽카드가 지원하는 최소 스왑체인 이미지 수 + 1 를 지정했기 때문에 그 수를 런타임에 알 수 있기 때문에 갯수를 먼저 받고 그 다음 vkGetSwapchainImagesKHR를 다시 호출하여 swapChainImages 핸들을 얻습니다.
+
+        // 2-5-6. 스왑 체인이 만들어졌으면 불칸에서 우리가 설정해둔 만큼 스왑 체인용 이미지도 같이 만들어줄 것입니다. 위에서 그래픽카드가 지원하는 최소 스왑체인 이미지 수 + 1 를 지정했기 때문에 그 수를 런타임에 알 수 있기 때문에 갯수를 먼저 받고 그 다음 vkGetSwapchainImagesKHR를 다시 호출하여 swapChainImages 핸들을 얻습니다.
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
         swapChainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
@@ -693,8 +708,10 @@ private:
         swapChainExtent = extent;
     }
 
+
+
     // 스왑 체인의 디테일한 기능들을 모두 지원하는지 자세히 확인합니다.
-    inline SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
+    HELPER_FUNCTION SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
     {
         SwapChainSupportDetails details;
 
@@ -723,7 +740,7 @@ private:
     }
 
     // 스왑 체인에서 사용할 서피스 형식(색상 깊이)을 설정합니다.
-    inline VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
+    HELPER_FUNCTION VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
     {
         // VkSurfaceFormatKHR 에는 format 과 colorSpace 라는 멤버변수가 있습니다. format 은 VK_FORMAT_B8G8R8A8_SRGB (픽셀당 32비트 RGBA) 와 같은 컬러 체널을, colorSpace 는 SRGB, CMYK, HSV 와 같은 색공간을 정의합니다.
         for (const auto& availableFormat : availableFormats)
@@ -739,7 +756,7 @@ private:
     }
 
     // 스왑 체인에서 사용할 프레젠테이션 모드(이미지를 화면으로 "교체"하기 위한 조건)를 설정합니다.
-    inline VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+    HELPER_FUNCTION VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
     {
         // 프레젠테이션 모드는 화면에 이미지를 표시하기 위한 실제 조건을 나타내기 때문에 스왑 체인에서 가장 중요한 설정입니다. Vulkan에서는 4가지 가능한 모드를 사용할 수 있습니다. MAILBOX 모드가 가장 좋고 이 모드를 사용 못하면 IMMEDIATE 을 사용하는 것을 추천합니다.
         // VK_PRESENT_MODE_IMMEDIATE_KHR: 수직 동기화 없이 바로바로 화면에 이미지를 표시합니다. (티어링 발생 함, 최대한 지연 없이 최신 화면을 보여주고 싶을 때 사용하면 좋습니다.)
@@ -760,7 +777,7 @@ private:
     }
 
     // 스왑 체인에서 사용할 스왑 범위(스왑 체인의 이미지 해상도)를 설정합니다.
-    inline VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
+    HELPER_FUNCTION VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
     {
         // VkSurfaceCapabilitiesKHR 구조체에는 설정 가능한 화면 해상도 범위가 들어있습니다. 
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
@@ -876,7 +893,8 @@ private:
         glfwTerminate();
 
 
-        // std::unique_ptr 나 std::shared_ptr 등을 써서 우아하게 RAII 를 처리할 수도 있지만 학습을 위해 모든 자원을 명시적으로 소멸합니다. | Possible to handle RAII more elegantly with std::unique_ptr or std::shared_ptr etc, but explicitly destroy all resources for learning now.
+        // std::unique_ptr 나 std::shared_ptr 등을 써서 우아하게 RAII 를 처리할 수도 있지만 학습을 위해 모든 자원을 명시적으로 소멸합니다.
+        // Possible to handle RAII more elegantly with std::unique_ptr or std::shared_ptr etc, but explicitly destroy all resources for learning now.
     }
 };
 
@@ -924,6 +942,4 @@ Functions have a lower case vk prefix | 함수는 vk 로 시직합니다
 Types like enumerations and structs have a Vk prefix | 타입은 Vk 로 시작합니다
 Enumeration values have a VK_ prefix | 이넘(플래그)값은 VK_ 로 시작합니다
 Almost all functions return a VkResult that is either VK_SUCCESS or an error code | 대부분의 Vulkan 함수들이 실행 결과로 VK_SUCCESS 나 에러 코드를 반환합니다
-
-
 */
