@@ -910,7 +910,7 @@ Create a VkInstance @
 Select a supported graphics card(VkPhysicalDevice) @
 Create a VkDeviceand VkQueue for drawing and presentation @
 Create a window, window surfaceand swap chain @
-Wrap the swap chain images into VkImageView
+Wrap the swap chain images into VkImageView @
 Create a render pass that specifies the render targets and usage
 Create framebuffers for the render pass
 Set up the graphics pipeline
