@@ -8,12 +8,12 @@
 
 #include <iostream>         // 
 #include <stdexcept>        // 예외처리
-#include <algorithm>        // 
+#include <algorithm>        // std::clamp 사용
 #include <vector>           // 
 #include <cstring>          // strcmp 사용
 #include <cstdlib>          // EXIT_SUCCESS, EXIT_FAILURE 매크로
-#include <cstdint>          // 
-#include <limits>           // 
+#include <cstdint>          // uint32_t 사용
+#include <limits>           // std::numeric_limits 사용
 #include <optional>         // 그래픽카드가 해당 큐 패밀리를 지원하는지 여부 검사
 #include <set>              // 사용할 모든 큐 패밀리 셋을 모아서 관리
 
@@ -22,14 +22,14 @@
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
-// 검증 레이어 목록
+// 필요한 검증 레이어 목록
 const std::vector<const char*> validationLayers {
     "VK_LAYER_KHRONOS_validation", // LunarG Vulkan SDK 에서 기본적으로 제공하는 유효성 검사 레이어
 };
 
-// 
+// 필요한 확장 기능 목록
 const std::vector<const char*> deviceExtensions {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME // 모든 그래픽 카드가 화면 출력을 지원하지는 않으므로 불칸은 스왑 체인을 확장 기능으로 만들었습니다. VK_KHR_swapchain 을 장치가 지원하는지 확인하고 이 확장을 추가해야 합니다.
 };
 
 #ifdef NDEBUG
@@ -40,7 +40,7 @@ constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검�
 
 
 // PFN_vkCreateDebugUtilsMessengerEXT 함수는 디버깅 정보 출력용 메신저 도구 개체를 만들때 사용하며, 안타깝게도 확장 함수이기 때문에 자동으로 로드되지 않습니다. vkGetInstanceProcAddr 를 사용하여 함수 주소를 직접 찾아야 합니다. 이를 처리하는 자체 프록시(래퍼) 함수를 만들 것입니다.
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
+inline VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr)
@@ -55,7 +55,7 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
 }
 
 // PFN_vkDestroyDebugUtilsMessengerEXT 함수도 마찬가지로 확장 함수라서 함수 주소를 직접 받아서 사용해야 합니다. 디버깅 정보 출력용 메신저 도구 개체의 소멸을 책임집니다.
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
+inline void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
 {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr)
@@ -81,12 +81,12 @@ struct QueueFamilyIndices
     }
 };
 
-// 
+// 스왑 체인을 사용하려면 기본적으로 확인해야 하는 세 가지 유형의 속성이 있습니다.
 struct SwapChainSupportDetails
 {
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes;
+    VkSurfaceCapabilitiesKHR capabilities;      // 1) 기본 서피스 기능 (스왑 체인의 최소/최대 이미지 수, 이미지의 최소/최대 너비 및 높이)
+    std::vector<VkSurfaceFormatKHR> formats;    // 2) 서피스 형식 (픽셀 형식, 색 공간)
+    std::vector<VkPresentModeKHR> presentModes; // 3) 사용 가능한 프레젠테이션 모드
 };
 
 
@@ -104,10 +104,10 @@ private:
     VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 추상적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
     VkQueue presentQueue;                               // 프레젠테이션 큐 핸들. 화면에 결과물을 보여주기 위해 사용됩니다.
 
-    VkSwapchainKHR swapChain;                           //
-    std::vector<VkImage> swapChainImages;               //
-    VkFormat swapChainImageFormat;                      //
-    VkExtent2D swapChainExtent;                         //
+    VkSwapchainKHR swapChain;                           // 불칸은 기본 프레임버퍼라는 개념이 없으므로 화면에 렌더링 하기 전에 이 버퍼를 소유할 인프라가 필요하며 이 인프라를 스왑 체인이라고 합니다. 스왑 체인은 기본적으로 화면에 표기되기를 기다리는 이미지 큐입니다. 응용 프로그램은 랜더링할 이미지를 다 그리면 이 큐에 넣습니다. 스왑 체인의 일반적인 목적은 이미지 표시를 화면의 새로 고침 빈도와 동기화하는 것입니다. 사실 프레젠테이션 큐가 지원되는 그래픽 카드에서는 스왑 체인 확장 기능도 반드시 지원할 것입니다.
+    std::vector<VkImage> swapChainImages;               // 이제 스왑 체인이 생성되었으므로 남은 것은 그 안에 있는 VkImages의 핸들을 받는 것입니다. 렌더링 작업 중에 이를 참조할 것입니다. 이미지는 스왑 체인 구현과 함께 생성하며 스왑 체인이 파괴되면 자동으로 소멸됩니다.
+    VkFormat swapChainImageFormat;                      // 지정한 스왑 체인 이미지 형식
+    VkExtent2D swapChainExtent;                         // 지정한 스왑 체인 이미지 크기
 
 public:
     void run()
@@ -160,7 +160,7 @@ private:
 
         createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
 
-        createSwapChain();          // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑체인 규약 생성
+        createSwapChain();          // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 버퍼 생성
 
         //createImageViews();         // 2-6. 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
 
@@ -270,7 +270,7 @@ private:
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
 
-            // 디버그 메신저도 설정하여 createInfo 에 집어넣습니다. 이때 우리가 만든 콜백 함수를 호출할 조건들을 설정할 수 있습니다.
+            // 디버그 메신저도 설정하여 createInfo 에 집어넣습니다. 이때 우리가 만든 콜백 함수를 호출할 조건들을 필터링할 수 있습니다.
             debugCreateInfo = {};
             debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
             debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -316,7 +316,8 @@ private:
         if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
         {
             // 여기에 중단점을 추가하면 쉽게 디버깅이 가능합니다.
-            std::cerr << "@ [ERROR] : " << pCallbackData->pMessage << std::endl;
+            // 콘솔에 빨간 글씨 출력 방법 - https://stackoverflow.com/questions/2616906/how-do-i-output-coloured-text-to-a-linux-terminal
+            std::cerr << "\033[1;31m" << "@ [ERROR] : " << pCallbackData->pMessage << "\033[0m\n" << std::endl;
         }
         else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
         {
@@ -400,20 +401,24 @@ private:
         for (const auto& device : devices)
         {
             // 우리가 사용할 그래픽카드가 필요한 큐 패밀리, 확장, 스왑체인을 가지고 있는지 검사하는 함수가 필요합니다. 함수가 멀리 떨어져 있으면 가독성을 해칠 수 있어서 isDeviceSuitable 이라는 static 람다함수로 만들었습니다.
-            static auto isDeviceSuitable = [=](VkPhysicalDevice device) -> bool
+            static auto isDeviceSuitable = [&](VkPhysicalDevice device) -> bool
             {
-                // 해당 그래픽카드가 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
+                // 해당 그래픽카드가 필요한 큐 패밀리를 모두 지원하는지 확인해야 합니다.
                 QueueFamilyIndices indices = findQueueFamilies(device);
 
+                // 해당 그래픽카드가 필요한 확장 기능들을 모두 지원하는지 확인해야 합니다.
                 bool extensionsSupported = checkDeviceExtensionSupport(device);
 
+                // 해당 그래픽카드가 필요한 스왑 체인 기능들을 모두 지원하는지 확인해야 합니다.
                 bool swapChainAdequate = false;
                 if (extensionsSupported)
                 {
                     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+                    // 현재로썬 윈도우 서피스에 하나 이상의 이미지 포멧과 하나 이상의 프레젠테이션 모드를 지원한다면 충분합니다.
                     swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
                 }
 
+                // 그래픽카드가 우리가 필요로 하는 모든 기능들을 제공함을 확인하였습니다.
                 return indices.isComplete() && extensionsSupported && swapChainAdequate;
             };
 
@@ -502,6 +507,30 @@ private:
     }
 
 
+    // 그래픽카드가 우리가 필요로 하는 모든 확장 기능들을 지원하는지 확인하고 그런 경우 true 를 반환하는 함수입니다.
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+    {
+        // 우선 그래픽카드가 지원하는 확장 기능 갯수를 먼저 받아옵니다.
+        uint32_t extensionCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+        // 받아온 확장 기능 갯수를 사용해 이번엔 그래픽카드가 지원하는 모든 확장 기능 리스트를 받아옵니다.
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+        // 아직 확인되지 않은 필요 확장 기능 리스트. 그래픽카드가 지원하는 모든 확장 기능 리스트를 순회하면서 우리가 필요로 하는 확장 기능들을 전부 지원하는지 하나씩 지워나가며 확인할 것입니다.
+        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+        for (const auto& extension : availableExtensions)
+        {
+            requiredExtensions.erase(extension.extensionName);
+        }
+
+        return requiredExtensions.empty();
+    }
+
+
+
     // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
     inline void createLogicalDevice()
     {
@@ -544,10 +573,10 @@ private:
         createInfo.pQueueCreateInfos = queueCreateInfos.data(); // 이렇게 쓰면 queueCreateInfos 를 C 스타일 배열처럼 만들어 포인터를 반환합니다.
         
 
-        // 불칸 인스턴스 생성과 마찬가지로 확장과 검증 레이어를 명시해야 합니다. 예를들어 이미지를 윈도우에 렌더링하도록 도와주는 VK_KHR_swapchain 확장은 비트코인 채굴용 그래픽카드에서는 제공하지 않고 단지 컴퓨트 연산만 제공할 수도 있습니다.
+        // 불칸 인스턴스 생성과 마찬가지로 확장과 검증 레이어를 명시해야 합니다. 예를들어 이미지를 윈도우에 렌더링하도록 도와주는 VK_KHR_swapchain 확장은 디스플레이 출력이 없는 서버용이나 비트코인 채굴용 그래픽카드에서는 제공하지 않고 단지 컴퓨트 연산만 제공할 수도 있습니다.
         createInfo.pEnabledFeatures = &deviceFeatures;
 
-        // 
+        // 우리가 사용할 추가 확장 기능 리스트도 불칸에게 전달합니다.
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
@@ -577,37 +606,56 @@ private:
 
 
 
-    // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑체인 규약 생성
+    // 2-5. 프레임 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 버퍼 생성
     inline void createSwapChain()
     {
+        // 스왑 체인이 사용 가능한지 확인하는 것만으로는 충분하지 않습니다. 실제로 창 표면과 호환되지 않을 수 있기 때문입니다. 스왑 체인을 생성하려면 인스턴스 및 장치 생성보다 훨씬 더 많은 설정이 필요하므로 계속 진행하기 전에 더 디테일한 기능들이 사용 가능한지 확인해야 합니다.
+        // 스왑 체인을 사용하려면 기본적으로 확인해야 하는 세 가지 유형의 속성이 있습니다.
+        // 1) 기본 서피스 기능 (스왑 체인의 최소/최대 이미지 수, 이미지의 최소/최대 너비 및 높이)
+        // 2) 서피스 형식 (픽셀 형식, 색 공간)
+        // 3) 사용 가능한 프레젠테이션 모드
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
+        // 그래픽카드가 스왑 체인을 사용할 수 있다는 것이 확인되면, 스왑 체인을 우리가 원하는 최상의 환경으로 설정해야 합니다.
+        // 결정할 세 가지 유형의 속성이 있습니다.
+        // 1) 서피스 형식 (색상 깊이)
+        // 2) 프레젠테이션 모드 (이미지를 화면으로 "교체"하기 위한 조건)
+        // 3) 스왑 범위 (스왑 체인의 이미지 해상도)
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
+        // 스왑 체인에 포함할 이미지 수를 결정해야 합니다. 구현은 작동하는 데 필요한 최소 수를 지정합니다. 단순히 최소값을 사용하면 렌더링할 이미지를 얻기 위해 드라이버가 내부 작업을 완료할 때까지 기다려야 할 수도 있음을 의미합니다. 따라서 최소 이미지 갯수보다 하나 이상의 이미지 갯수를 사용하는 것이 좋습니다.
         uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+        // 또한, 위에서 최소 이미지 갯수 + 1 을 했지만 지원하는 최대 이미지 갯수를 초과하지 않도록 해야 합니다. 여기서 0 은 최대값이 없음을 의미하는 특수 값입니다.
         if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
         {
             imageCount = swapChainSupport.capabilities.maxImageCount;
         }
 
+        // 스왑 체인을 설정하기 위한 속성값들을 정의합니다.
         VkSwapchainCreateInfoKHR createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        createInfo.surface = surface;
+        createInfo.surface = surface; // 스왑 체인과 연결할 서피스를 설정합니다.
 
         createInfo.minImageCount = imageCount;
         createInfo.imageFormat = surfaceFormat.format;
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
-        createInfo.imageArrayLayers = 1;
-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        createInfo.imageArrayLayers = 1; // 양안 3D 렌더링을 하지 않는 이상 이미지 레이어 수는 항상 1 입니다.
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // 스왑 체인에서 어떤 연산으로 이미지를 사용할 지 지정합니다. 우리는 이미지를 이용해서 바로 렌더링을 할 것이므로 COLOR_ATTACHMENT 로 사용합니다. 나중에 포스트-프로세싱 이펙트 같은 것들을 위해 이 값을 VK_IMAGE_USAGE_TRANSFER_DST_BIT 로 설정하여 메모리 연산을 이용해 최종 스왑 체인 이미지로 전송할 수도 있습니다.
 
+        // 다음으로, 여러 큐 패밀리에서 사용될 스왑 체인 이미지를 처리하는 방법을 지정해야 합니다. 현재 애플리케이션의 경우 그래픽 큐 패밀리와 프레젠테이션 큐 페밀리가 다르게 사용됩니다. 따라서 그래픽 큐에서 스왑 체인의 이미지를 그린 다음 프레젠테이션 큐에 제출합니다.
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
         uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
         if (indices.graphicsFamily != indices.presentFamily) {
+            // 여러 큐에서 이미지를 엑세스하는 두 가지 방식이 있습니다.
+            // 1) VK_SHARING_MODE_EXCLUSIVE: 이미지는 한 번에 하나의 큐 패밀리가 소유하며 소유권은 다른 큐 패밀리에서 사용하기 전에 명시적으로 설정되어야 합니다. 이 옵션은 최상의 성능을 제공합니다.
+            // 2) VK_SHARING_MODE_CONCURRENT: 명시적 소유권 이전 없이 여러 대기열 패밀리에서 이미지를 사용할 수 있습니다. 이 옵션은 코딩하기 편합니다.
             createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            // 동시 모드를 사용하려면 queueFamilyIndexCount 및 pQueueFamilyIndices 매개변수를 사용하여 공유할 큐 패밀리 소유권을 미리 지정해야 합니다.
+            // 그래픽 큐 페밀리와 프레젠테이션 큐 페밀리가 동일한 경우(대부분의 하드웨어에서 마찬가지입니다.) 동시 모드에서는 최소 두 개의 고유한 대기열 제품군을 지정해야 하므로 VK_SHARING_MODE_EXCLUSIVE (배타적 모드)를 사용해야 합니다.
             createInfo.queueFamilyIndexCount = 2;
             createInfo.pQueueFamilyIndices = queueFamilyIndices;
         }
@@ -615,94 +663,53 @@ private:
             createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         }
 
+        // 그래픽 카드에서 지원되는 경우 90도 시계 방향 회전 또는 수평 뒤집기와 같이 스왑 체인의 이미지에 특정 변환을 적용하도록 지정할 수 있습니다. 변환을 원하지 않는 경우 그냥 현재 변환을 지정하기만 하면 됩니다.
         createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+        // 윈도우 시스템에서 다른 윈도우들과 이미지를 혼합하는 데 알파 채널을 사용할지 여부를 지정합니다. 거의 대부분은 알파 채널을 무시하고 싶을 것이므로 VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR 을 사용합니다.
         createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         createInfo.presentMode = presentMode;
+        // 다른 윈도우 등에 의해 가려진 영역(화면에 보이지 않는 부분)에 있는 렌더링 작업을 생략하고 버릴 수 있는지 여부를 설정합니다.
         createInfo.clipped = VK_TRUE;
 
+        // Vulkan을 사용하면 애플리케이션이 실행되는 동안 스왑 체인이 유효하지 않거나 최적화되지 않을 수 있습니다. 예를 들어 창 크기가 조정된 경우 스왑 체인은 실제로 처음부터 다시 만들어야 하며 이전 체인에 대한 참조를 이 필드에 지정해야 합니다.
         createInfo.oldSwapchain = VK_NULL_HANDLE;
 
+        // 이제 스왑 체인을 만들고 핸들을 얻습니다!
         if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create swap chain!");
         }
 
+        // 스왑 체인이 만들어졌으면 불칸에서 우리가 설정해둔 만큼 스왑 체인용 이미지도 같이 만들어줄 것입니다. 위에서 그래픽카드가 지원하는 최소 스왑체인 이미지 수 + 1 를 지정했기 때문에 그 수를 런타임에 알 수 있기 때문에 갯수를 먼저 받고 그 다음 vkGetSwapchainImagesKHR를 다시 호출하여 swapChainImages 핸들을 얻습니다.
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
         swapChainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
 
+        // 마지막으로 스왑 체인 이미지에 대해 선택한 형식과 범위를 멤버 변수에 저장합니다. 나중에 필요할 것입니다.
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
     }
 
-
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
-    {
-        for (const auto& availableFormat : availableFormats)
-        {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            {
-                return availableFormat;
-            }
-        }
-
-        return availableFormats[0];
-    }
-
-    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
-    {
-        for (const auto& availablePresentMode : availablePresentModes)
-        {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                return availablePresentMode;
-            }
-        }
-
-        return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
-    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
-    {
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-        {
-            return capabilities.currentExtent;
-        }
-        else
-        {
-            int width, height;
-            glfwGetFramebufferSize(window, &width, &height);
-
-            VkExtent2D actualExtent = {
-                static_cast<uint32_t>(width),
-                static_cast<uint32_t>(height)
-            };
-
-            actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-            actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-
-            return actualExtent;
-        }
-    }
-
-    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
+    // 스왑 체인의 디테일한 기능들을 모두 지원하는지 자세히 확인합니다.
+    inline SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
     {
         SwapChainSupportDetails details;
 
+        // 1) 기본 서피스 기능(스왑 체인의 최소/최대 이미지 수, 이미지의 최소/최대 너비 및 높이 등 화면 사용 용도)을 제공하는지 확인합니다. VkPhysicalDevice 와 VkSurfaceKHR 는 스왑 체인을 사용하기 위한 핵심 요소들이기 때문에 불칸이 이 요소들을 가지고 기능 지원을 확인합니다. 쿼리의 결과는 VkSurfaceCapabilitiesKHR 구조체 즉, &details.capabilities 로 반환됩니다
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 
+        // 2) 서피스 형식(픽셀 형식, 색 공간)을 제공하는지 확인합니다.
         uint32_t formatCount;
         vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
         if (formatCount != 0)
         {
-            details.formats.resize(formatCount);
+            details.formats.resize(formatCount); // 모든 지원 형식을 전부 저장할 수 있도록 벡터를 리사이징 합니다
             vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
         }
 
+        // 3) 필요한 프레젠테이션 모드를 제공하는지 확인합니다.
         uint32_t presentModeCount;
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-
         if (presentModeCount != 0)
         {
             details.presentModes.resize(presentModeCount);
@@ -712,24 +719,71 @@ private:
         return details;
     }
 
-
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+    // 스왑 체인에서 사용할 서피스 형식(색상 깊이)을 설정합니다.
+    inline VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
     {
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-
-        for (const auto& extension : availableExtensions)
+        // VkSurfaceFormatKHR 에는 format 과 colorSpace 라는 멤버변수가 있습니다. format 은 VK_FORMAT_B8G8R8A8_SRGB (픽셀당 32비트 RGBA) 와 같은 컬러 체널을, colorSpace 는 SRGB, CMYK, HSV 와 같은 색공간을 정의합니다.
+        for (const auto& availableFormat : availableFormats)
         {
-            requiredExtensions.erase(extension.extensionName);
+            // 가장 흔하게 사용하는 32비트 RGBA 픽셀 포멧과 SRGB 색공간을 지원하는지 확인합니다.
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            {
+                return availableFormat;
+            }
         }
 
-        return requiredExtensions.empty();
+        return availableFormats[0];
     }
+
+    // 스왑 체인에서 사용할 프레젠테이션 모드(이미지를 화면으로 "교체"하기 위한 조건)를 설정합니다.
+    inline VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+    {
+        // 프레젠테이션 모드는 화면에 이미지를 표시하기 위한 실제 조건을 나타내기 때문에 스왑 체인에서 가장 중요한 설정입니다. Vulkan에서는 4가지 가능한 모드를 사용할 수 있습니다. MAILBOX 모드가 가장 좋고 이 모드를 사용 못하면 IMMEDIATE 을 사용하는 것을 추천합니다.
+        // VK_PRESENT_MODE_IMMEDIATE_KHR: 수직 동기화 없이 바로바로 화면에 이미지를 표시합니다. (티어링 발생 함, 최대한 지연 없이 최신 화면을 보여주고 싶을 때 사용하면 좋습니다.)
+        // VK_PRESENT_MODE_FIFO_KHR : 일반적으로 알려진 수직 동기화 모드입니다. GPU가 다음 프레임을 위한 이미지를 한 번만 연산하여 내부 큐에 저장된 상태로 기다리다가 다음 화면 주사율에서 순차적으로 보여줍니다. (티어링 발생 안함, GPU를 여유롭게 굴리고 싶을 때 사용하면 좋습니다.)
+        // VK_PRESENT_MODE_FIFO_RELAXED_KHR : 위와 비슷하지만, GPU가 다음 프레임 이미지를 그리는 도중에 화면 주사율에 도달하면 그냥 현재까지 그린 이미지를 바로 보여줍니다. (티어링 발생 함, 어플리케이션이 화면 주사율보다 빠를때 좋음)
+        // VK_PRESENT_MODE_MAILBOX_KHR : 일반적으로 알려진 트리플 버퍼링 수직 동기화 모드입니다. GPU가 다음 프레임을 위한 이미지를 다 연산했는데다음 화면 주사율까지 여유가 있으면 계속해서 프레임을 업데이트 하다가 화면 주사율에 도달했을때 가장 최근에 완성한 이미지를 보여줍니다. (티어링이 발생하지 않는 모드중 가장 지연이 적으나 GPU 가 쉴 시간을 주지 않으므로 전력 사용량이 많아 모바일에서는 적절하지 않음)
+        for (const auto& availablePresentMode : availablePresentModes)
+        {
+            // 트리플 버퍼링 수직 동기화 모드가 가능하면 활성화
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+            {
+                return availablePresentMode;
+            }
+        }
+
+        // 아니면 일반 수직 동기화 모드 활성화 (일반 수직 동기화 모드는 불칸에서 스왑 체이닝이 가능한 경우 반드시 지원하도록 보장합니다.)
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    // 스왑 체인에서 사용할 스왑 범위(스왑 체인의 이미지 해상도)를 설정합니다.
+    inline VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities)
+    {
+        // VkSurfaceCapabilitiesKHR 구조체에는 설정 가능한 화면 해상도 범위가 들어있습니다. 
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+        {
+            // capabilities.currentExtent 멤버에는 현재 윈도우 화면의 크기(해상도)가 들어있으며 일반적으로는 이 값을 사용합니다.
+            return capabilities.currentExtent;
+        }
+        else // 하지만 일부 윈도우 관리자에서는 특이하게 currenExtent 값을 uint32_t 의 최대값으로 설정하여 표시하는 경우가 있습니다. 그럴 경우 minImageExtent 와 maxImageExtent 범위 내에서 창과 가장 일치하는 해상도를 계산해 넣어야 합니다. 우리는 GLFW 를 사용했으므로 이 값들을 GLFW 로 부터 직접 받아옵니다. 혹시 윈도우에 High DPI 설정 (UI스케일) 이 되어있다면 불행하게도 실제 윈도우의 해상도는 스크린 좌표계 해상도보다 클 수 있습니다. 때문에 최소 및 최대 이미지 범위와 일치시키기 전에 실제 픽셀 단위로 창의 해상도를 요청하기 위해 glfwGetFramebufferSize 를 반드시 사용해야 합니다.
+        {
+            int width, height;
+            glfwGetFramebufferSize(window, &width, &height);
+
+            VkExtent2D actualExtent = {
+                static_cast<uint32_t>(width),
+                static_cast<uint32_t>(height)
+            };
+
+            // std::clamp 는 actualExtent를 그래픽카드에서 지원 가능한 최소 및 최대 해상도 범위로 제한하기 위해서 사용합니다.
+            actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+            return actualExtent;
+        }
+    }
+
+
 
 
     // 3. 계속해서 매 프레임 렌더
@@ -749,10 +803,10 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
-        // 
+        // 스왑 체인 개체를 지웁니다.
         vkDestroySwapchainKHR(device, swapChain, nullptr);
 
-        // 추상적 디바이스를 지웁니다.
+        // 추상적 디바이스 개체를 지웁니다.
         vkDestroyDevice(device, nullptr);
 
         // 디버깅 정보 출력용 메신저 도구 개체를 지웁니다.
@@ -761,7 +815,7 @@ private:
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
 
-        // 
+        // 서피스 개체를 지웁니다.
         vkDestroySurfaceKHR(instance, surface, nullptr);
 
         // 불칸 개체를 지웁니다. (인스턴스 핸들, 메모리를 직접 관리하기 위한 커스텀 얼로케이터 콜백)
@@ -804,10 +858,10 @@ int main()
 
 /*
 // To-do list | 삼각형 하나 그릴려면 앞으로 해야할 일
-Create a VkInstance
-Select a supported graphics card(VkPhysicalDevice)
-Create a VkDeviceand VkQueue for drawing and presentation
-Create a window, window surfaceand swap chain
+Create a VkInstance @
+Select a supported graphics card(VkPhysicalDevice) @
+Create a VkDeviceand VkQueue for drawing and presentation @
+Create a window, window surfaceand swap chain @
 Wrap the swap chain images into VkImageView
 Create a render pass that specifies the render targets and usage
 Create framebuffers for the render pass
@@ -822,8 +876,6 @@ Functions have a lower case vk prefix | 함수는 vk 로 시직합니다
 Types like enumerations and structs have a Vk prefix | 타입은 Vk 로 시작합니다
 Enumeration values have a VK_ prefix | 이넘(플래그)값은 VK_ 로 시작합니다
 Almost all functions return a VkResult that is either VK_SUCCESS or an error code | 대부분의 Vulkan 함수들이 실행 결과로 VK_SUCCESS 나 에러 코드를 반환합니다
-
-
 
 
 */
