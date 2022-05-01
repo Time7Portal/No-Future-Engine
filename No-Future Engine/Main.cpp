@@ -932,7 +932,7 @@ private:
     // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
     inline void createGraphicsPipeline()
     {
-        // ------------- 이 아래로는 프로그래밍 가능한 셰이더 스테이지에 대한 설정입니다. -------------
+        // ------------- 이 아래로는 프로그래밍 가능한 셰이더 스테이지 (Shader stages) 에 대한 설정입니다. -------------
         
         // 2-8-1. 바이너리 파일을 읽어서 바이트 배열로 반환합니다.
         auto vertShaderCode = readFile("Shaders/hello_triangle_shader.vert.spv");
@@ -968,7 +968,7 @@ private:
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
 
-        // ------------- 이 아래로는 프로그래밍 불가능한 스테이지에 대한 설정입니다. -------------
+        // ------------- 이 아래로는 프로그래밍 불가능한 고정 스테이지 (Fixed-function state) 에 대한 설정입니다. -------------
         
         // 이전 세대 그래픽스 API 에서는 그래픽스 파이프라인의 대부분의 단계에 대해 기본 설정을 제공하지만, 불칸은 모든 것들을 직접 다 설정해야 합니다.
 
@@ -1116,6 +1116,8 @@ private:
         //dynamicState.pDynamicStates = dynamicStates.data();
 
 
+        // ------------- 이 아래로는 런타임에 셰이더에서 참조하는 uniform 과 push values 값들에 대한 설정 (Pipeline layout) 입니다. -------------
+
         // 2-8-14. 파이프라인 레이아웃을 설정합니다.
         // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 정점 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -1126,36 +1128,49 @@ private:
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
 
-        // 2-8-15. 파이프라인 레이아웃을 만듭니다.
+        // 2-8-15. 파이프라인 레이아웃을 생성합니다.
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create pipeline layout!");
         }
 
 
-        // 2-8-16. 그래픽스 파이프라인을 만듭니다.
+        // ------------- 이 아래로는 파이프라인 스테이지에서 참조하는 첨부 및 첨부 사용방식 설정 (Render pass) 입니다. -------------
+        
+        // 2-8-16. 그래픽스 파이프라인을 설정합니다.
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        // 셰이더 스테이지 설정
         pipelineInfo.stageCount = 2;
         pipelineInfo.pStages = shaderStages;
+        // 고정 스테이지 설정
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = nullptr; // Optional
         pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = nullptr; // Optional
+        // 파이프라인 레이아웃과 렌더패스는 특이하게 구조체 포인터가 아닌 핸들을 집어넣습니다.
         pipelineInfo.layout = pipelineLayout;
         pipelineInfo.renderPass = renderPass;
+        // 이 그래픽 파이프라인이 사용할 서브 패스의 인덱스
         pipelineInfo.subpass = 0;
-        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        // Vulkan을 사용하면 기존 파이프라인에서 파생하여 새 그래픽 파이프라인을 만들 수 있습니다. 기존 파이프라인과 많은 기능을 공유하는 경우나 동일한 상위 파이프라인을 가지고 있는 경우 파이프라인 간의 전환을 통해 설정하는 과정에 들어가는 비용을 줄일 수 있습니다. basePipelineHandle을 사용하여 기존 파이프라인의 핸들을 지정하거나 basePipelineIndex를 사용하여 인덱스에 의해 생성될 다른 파이프라인을 참조할 수 있습니다.
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
+        pipelineInfo.basePipelineIndex = -1; // Optional
 
+
+        // 마침내 그래픽스 파이프라인을 생성합니다.
+        // 두 번째 매개변수로 전달한 VK_NULL_HANDLE 인수는 사실 VkPipelineCache 개체를 참조할 수 있습니다. 파이프라인 캐시는 vkCreateGraphicsPipelines에 대한 여러 호출과 캐시가 파일에 저장된 경우 프로그램 실행 전반에 걸쳐 파이프라인 생성과 관련된 데이터를 저장하고 재사용하는 데 사용할 수 있습니다. 이를 통해 나중에 파이프라인 생성 속도를 크게 높일 수 있습니다. 파이프라인 캐시 장에서 이에 대해 알아보겠습니다.
         if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create graphics pipeline!");
         }
 
         
-        // 다 쓴 셰이더 모듈은 소멸시킵니다.
+        // vkCreateGraphicsPipelines 을 부르고 그래픽스 파이프라인이 최종적으로 생성되면, 다 쓴 셰이더 모듈은 소멸시킬 수 있습니다.
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
@@ -1236,7 +1251,7 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
-        // 
+        // 그래픽 파이프라인은 일반적인 그리기 작업에 항상 필요하므로 프로그램 종료 시에만 제거해야 합니다.
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
 
         // 파이프라인 레이아웃은 프로그램 수명 내내 참조되므로 마지막에 삭제해야 합니다.
