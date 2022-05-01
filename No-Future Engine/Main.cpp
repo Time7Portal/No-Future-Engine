@@ -1327,9 +1327,9 @@ Select a supported graphics card(VkPhysicalDevice) @
 Create a VkDeviceand VkQueue for drawing and presentation @
 Create a window, window surfaceand swap chain @
 Wrap the swap chain images into VkImageView @
-Create a render pass that specifies the render targets and usage
-Create framebuffers for the render pass
-Set up the graphics pipeline
+Create a render pass that specifies the render targets and usage @
+Create framebuffers for the render pass @
+Set up the graphics pipeline @
 Allocateand record a command buffer with the draw commands for every possible swap chain image
 Draw frames by acquiring images, submitting the right draw command bufferand returning the images back to the swap chain
 
