@@ -118,6 +118,7 @@ private:
     VkFormat swapChainImageFormat;                      // 지정한 스왑 체인 이미지 형식
     VkExtent2D swapChainExtent;                         // 지정한 스왑 체인 이미지 크기
     std::vector<VkImageView> swapChainImageViews;       // 스왑 체인용 이미지 뷰들의 핸들 모음
+    std::vector<VkFramebuffer> swapChainFramebuffers;   // 스왑 체인용 프레임 버퍼들의 핸들 모음
 
     VkRenderPass renderPass;                            // 렌더 패스 핸들
     VkPipelineLayout pipelineLayout;                    // 파이프라인 레이아웃 핸들
@@ -185,7 +186,7 @@ private:
 
         createGraphicsPipeline();   // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
 
-        //createFramebuffers();       // 2-9.
+        createFramebuffers();       // 2-9. 프레임 버퍼들을 생성
 
         //createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
 
@@ -852,20 +853,23 @@ private:
 
 
 
-    // 2-7. 렌더링에 사용할 프레임 버퍼 첨부들과 서브패스에 대한 정보를 명시합니다.
-    // 어테치먼트(첨부)는 이미지 뷰의 일종이지만 추가적으로 어떻게 읽고, 쓰고, 사용하는지에 대한 내용이 포함되어 있습니다 -  https://www.reddit.com/r/vulkan/comments/a27cid/what_is_an_attachment_in_the_render_passes/ , 처음 만나는 불칸 232페이지 참고
+    // 2-7. 렌더 패스 생성. 렌더링에 사용할 프레임 버퍼 어태치먼트들과 서브패스에 대한 정보를 명시합니다.
     void createRenderPass()
     {
-        // 파이프라인 생성을 완료하기 전에 렌더링하는 동안 사용할 프레임 버퍼 첨부 요소들에 대해 Vulkan에 알려야 합니다. 색상 및 깊이 버퍼의 수, 각각에 사용할 샘플의 수, 렌더링 작업 전반에 걸쳐 해당 내용을 처리하는 방법을 지정해야 합니다. 이 모든 정보는 새로운 createRenderPass 함수를 생성할 렌더 패스 객체에 래핑됩니다.
+        // 어테치먼트(어태치먼트)는 프레임 버퍼에 사용된 이미지 뷰입니다. 프레임 버퍼에 어태치먼트되었다고 하여 어태치먼트라 부릅니다. 렌더링의 대상이 될 어테치먼트를 렌더 타켓이라고 부르기도 합니다.
+        // https://www.reddit.com/r/vulkan/comments/a27cid/what_is_an_attachment_in_the_render_passes/
+        // 처음 만나는 불칸 232페이지 참고
+        
+        // 파이프라인 생성을 완료하기 전에 렌더링하는 동안 사용할 프레임 버퍼 어태치먼트 요소들에 대해 Vulkan에 알려야 합니다. 색상 및 깊이 버퍼의 수, 각각에 사용할 샘플의 수, 렌더링 작업 전반에 걸쳐 해당 내용을 처리하는 방법을 지정해야 합니다. 이 모든 정보는 새로운 createRenderPass 함수를 생성할 렌더 패스 객체에 래핑됩니다.
 
-        // 우리의 경우 스왑 체인의 이미지 중 하나로 표시되는 단일 색상 버퍼 첨부만 있을 것입니다. VkAttachmentDescription 디스크립터는 첨부의 다양한 속성을 지정하는데 사용합니다.
+        // 우리의 경우 스왑 체인의 이미지 중 하나로 표시되는 단일 색상 버퍼 어태치먼트만 있을 것입니다. VkAttachmentDescription 디스크립터는 어태치먼트의 다양한 속성을 지정하는데 사용합니다.
         VkAttachmentDescription colorAttachment{};
-        // 색상 첨부 형식은 스왑 체인 이미지 형식과 동일해야 하며 아직 멀티샘플링을 사용하지 않으므로 1개의 샘플을 사용합니다.
+        // 색상 어태치먼트 형식은 스왑 체인 이미지 형식과 동일해야 하며 아직 멀티샘플링을 사용하지 않으므로 1개의 샘플을 사용합니다.
         colorAttachment.format = swapChainImageFormat;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        // loadOp 및 storeOp는 렌더링 전과 렌더링 후에 첨부 데이터로 수행할 작업을 결정합니다.
+        // loadOp 및 storeOp는 렌더링 전과 렌더링 후에 어태치먼트 데이터로 수행할 작업을 결정합니다.
         // loadOp에 대해 다음과 같은 선택 사항이 있습니다.
-        // VK_ATTACHMENT_LOAD_OP_LOAD: 기존 첨부 내용을 유지합니다.
+        // VK_ATTACHMENT_LOAD_OP_LOAD: 기존 어태치먼트 내용을 유지합니다.
         // VK_ATTACHMENT_LOAD_OP_CLEAR: 시작 시 값을 상수로 지웁니다.
         // VK_ATTACHMENT_LOAD_OP_DONT_CARE : 시작 값은 신경 안씁니다.
         // // 우리의 경우 새 프레임을 그리기 전에 clear 작업을 사용하여 프레임 버퍼를 검은색으로 지웁니다.
@@ -880,7 +884,7 @@ private:
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         // Vulkan의 텍스처와 프레임 버퍼는 특정 픽셀 형식의 VkImage 개체로 표시되지만 메모리에 픽셀을 정렬하는 방식인 픽셀 레이아웃은 이미지로 수행하려는 작업에 따라 변경될 수 있습니다.
         // 가장 일반적인 레이아웃은 다음과 같습니다.
-        // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: 색상 첨부로 사용되는 이미지
+        // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: 색상 어태치먼트로 사용되는 이미지
         // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : 스왑 체인에 표시할 이미지
         // VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : 메모리 복사 작업의 대상으로 사용할 이미지
         // 텍스처링 장에서 이 주제에 대해 더 깊이 논의할 것이지만 지금 알아야 할 중요한 것은 이미지가 다음에 포함될 작업에 적합한 특정 레이아웃으로 전환되어야 한다는 것입니다.
@@ -889,29 +893,29 @@ private:
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 
-        // 서브패스 및 첨부 파일 속성 설정
+        // 서브패스 및 어태치먼트 파일 속성 설정
         // 하나의 렌더 패스는 여러 서브(하위)패스로 구성될 수 있습니다. 서브패스는 이전 패스의 프레임 버퍼 내용에 따라 달라지는 후속 렌더링 작업입니다(예: 차례로 적용되는 후처리 효과 시퀀스). 이러한 렌더링 작업을 하나의 렌더 패스로 그룹화하면 Vulkan은 작업을 재정렬하고 더 나은 성능을 위해 메모리 대역폭을 절약할 수 있습니다. 그러나 첫 번째 삼각형의 경우 단일 서브패스를 사용합니다.
-        // 모든 서브패스는 하나 이상의 첨부를 참조합니다. 이러한 참조는 다음과 같은 VkAttachmentReference 구조체로 표현합니다.
-        // Attachment 파라미터는 어떤 첨부를 참조할지 디스크립터 배열의 인덱스를 지정합니다. 우리의 배열은 단일 VkAttachmentDescription으로 구성되어 있으므로 인덱스는 0입니다. Vulkan은 서브패스가 시작될 때 자동으로 첨부 파일을 이 레이아웃으로 전환합니다. 첨부 파일을 사용하여 색상 버퍼 기능을 수행할 예정이며 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL 레이아웃은 이름에서 알 수 있듯이 최고의 성능을 제공합니다.
+        // 모든 서브패스는 하나 이상의 어태치먼트를 참조합니다. 이러한 참조는 다음과 같은 VkAttachmentReference 구조체로 표현합니다.
+        // Attachment 파라미터는 어떤 어태치먼트를 참조할지 디스크립터 배열의 인덱스를 지정합니다. 우리의 배열은 단일 VkAttachmentDescription으로 구성되어 있으므로 인덱스는 0입니다. Vulkan은 서브패스가 시작될 때 자동으로 어태치먼트 파일을 이 레이아웃으로 전환합니다. 어태치먼트 파일을 사용하여 색상 버퍼 기능을 수행할 예정이며 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL 레이아웃은 이름에서 알 수 있듯이 최고의 성능을 제공합니다.
         VkAttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         // 서브패스는 VkSubpassDescription 구조를 사용하여 설명됩니다.
         VkSubpassDescription subpass{};
-        // Vulkan은 향후 컴퓨팅 서브패스도 지원할 수 있으므로 이것이 그래픽 서브패스임을 명시해야 합니다. 다음으로 색상 첨부 파일에 대한 참조를 지정합니다.
+        // Vulkan은 향후 컴퓨팅 서브패스도 지원할 수 있으므로 이것이 그래픽 서브패스임을 명시해야 합니다. 다음으로 색상 어태치먼트 파일에 대한 참조를 지정합니다.
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        // 이 배열의 첨부 인덱스는 layout(location = 0) out vec4 outColor 지시문을 사용하여 프래그먼트 셰이더에서 직접 참조됩니다!
+        // 이 배열의 어태치먼트 인덱스는 layout(location = 0) out vec4 outColor 지시문을 사용하여 프래그먼트 셰이더에서 직접 참조됩니다!
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
-        // 다음과 같은 다른 유형의 첨부도 추가로 서브패스에서 참조할 수 있습니다.
-        // pInputAttachments : 셰이더에서 읽어온 첨부
-        // pResolveAttachments : 멀티샘플링 색상 첨부 파일에 사용되는 첨부
-        // pDepthStencilAttachment : 깊이 및 스텐실 데이터에 대한 첨부
-        // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 첨부
+        // 다음과 같은 다른 유형의 어태치먼트도 추가로 서브패스에서 참조할 수 있습니다.
+        // pInputAttachments : 셰이더에서 읽어온 어태치먼트
+        // pResolveAttachments : 멀티샘플링 색상 어태치먼트 파일에 사용되는 어태치먼트
+        // pDepthStencilAttachment : 깊이 및 스텐실 데이터에 대한 어태치먼트
+        // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 어태치먼트
 
 
-        // 그런 다음 VkRenderPassCreateInfo 구조를 첨부 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 첨부를 참조합니다.
+        // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다.
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 1;
@@ -1118,7 +1122,7 @@ private:
 
         // ------------- 이 아래로는 런타임에 셰이더에서 참조하는 uniform 과 push values 값들에 대한 설정 (Pipeline layout) 입니다. -------------
 
-        // 2-8-14. 파이프라인 레이아웃을 설정합니다.
+        // 2-8-14. 파이프라인 레이아웃을 설정합니다. (파이프라인 레이아웃은 사실 스왑 체인에 묶여서 생성되고 파괴되지 않아도 되는 별개의 존재라고 합니다.. 유연한 셰이더 스위칭을 위해 셰이더 모듈과 함께 나중에 별도의 파일로 분리하는게 좋을 것 같습니다.)
         // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 정점 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1135,7 +1139,7 @@ private:
         }
 
 
-        // ------------- 이 아래로는 파이프라인 스테이지에서 참조하는 첨부 및 첨부 사용방식 설정 (Render pass) 입니다. -------------
+        // ------------- 이 아래로는 파이프라인 스테이지에서 참조하는 어태치먼트 및 어태치먼트 사용방식 설정 (Render pass) 입니다. -------------
         
         // 2-8-16. 그래픽스 파이프라인을 설정합니다.
         VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -1174,8 +1178,6 @@ private:
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
-
-
 
     // 바이너리 파일을 읽어서 바이트 배열로 반환합니다.
     // @@ 나중에 C 스타일로 바꿔서 성능 향상 가능할 듯..
@@ -1234,6 +1236,40 @@ private:
 
 
 
+    // 2-9. 프레임 버퍼들을 생성
+    void createFramebuffers()
+    {
+        // 렌더 패스 생성 중에 지정된 어태치먼트는 VkFramebuffer 개체로 래핑하여 바인딩됩니다. 프레임 버퍼 개체는 어태치먼트를 나타내는 모든 VkImageView 개체를 참조합니다. 우리의 경우 그것은 단 하나일 것입니다: 색상 어태치먼트. 그러나 어태치먼트에 사용해야 하는 이미지는 프레젠테이션을 위해 스왑 체인이 반환하는 이미지에 따라 다릅니다. 때문에 스왑 체인에 들어있는 모든 이미지들에 대해 프레임 버퍼를 생성하고 드로잉 시 회수된 이미지에 해당하는 프레임 버퍼를 사용해야 합니다.
+        swapChainFramebuffers.resize(swapChainImageViews.size());
+
+        // 모든 스왑체인 이미지 뷰들에 대한 프레임 버퍼를 만듭니다.
+        for (size_t i = 0; i < swapChainImageViews.size(); i++)
+        {
+            VkImageView attachments[] = {
+                swapChainImageViews[i]
+            };
+
+            // 보시다시피 프레임 버퍼 생성은 매우 간단합니다. 먼저 어떤 렌더패스가 프레임 버퍼와 호환되는지 지정해야 합니다. 해당 렌더패스에 호환되는 프레임 버퍼만 사용할 수 있습니다.
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = renderPass;
+            // AttachmentCount 및 pAttachments 매개변수에 렌더 패스 pAttachment 배열의 각 어태치먼트 디스크립션에 바인딩되어야 하는 VkImageView 개체를 지정합니다.
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = attachments;
+            // 너비 및 높이 매개변수는 스왑 체인 크기와 동일하게 하면 됩니다. 레이어는 이미지 배열의 레이어 수를 나타냅니다. 우리가 만든 스왑 체인 이미지는 단일 이미지이므로 레이어 수는 1입니다.
+            framebufferInfo.width = swapChainExtent.width;
+            framebufferInfo.height = swapChainExtent.height;
+            framebufferInfo.layers = 1;
+
+            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create framebuffer!");
+            }
+        }
+    }
+
+
+
     // 3. 계속해서 매 프레임 렌더
     inline void mainLoop()
     {
@@ -1251,6 +1287,12 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 이미지 뷰들과 랜더패스를 지우기 전에 먼저 이들을 사용하고 있는 프레임 버퍼를 삭제해야 합니다.
+        for (auto framebuffer : swapChainFramebuffers)
+        {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
         // 그래픽 파이프라인은 일반적인 그리기 작업에 항상 필요하므로 프로그램 종료 시에만 제거해야 합니다.
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
 
