@@ -7,6 +7,7 @@
 #include <glm/mat4x4.hpp>
 
 #include <iostream>         // 
+#include <fstream>          // 셰이더 소스를 읽기 위함
 #include <stdexcept>        // 예외처리
 #include <algorithm>        // std::clamp 사용
 #include <vector>           // 
@@ -119,6 +120,7 @@ private:
 
     std::vector<VkImageView> swapChainImageViews;       // 스왑 체인용 이미지 뷰들의 핸들 모음
 
+    VkPipelineLayout pipelineLayout;                    // 
 
 
 public:
@@ -181,7 +183,7 @@ private:
 
         //createRenderPass();         // 2-7.
 
-        //createGraphicsPipeline();   // 2-8.
+        createGraphicsPipeline();   // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
 
         //createFramebuffers();       // 2-9.
 
@@ -845,6 +847,188 @@ private:
 
 
 
+    // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
+    inline void createGraphicsPipeline()
+    {
+        // ------------- 이 아래로는 프로그래밍 가능한 셰이더 스테이지에 대한 설정입니다. -------------
+        
+        // 2-8-1. 바이너리 파일을 읽어서 바이트 배열로 반환합니다.
+        auto vertShaderCode = readFile("Shaders/hello_triangle_shader.vert.spv");
+        auto fragShaderCode = readFile("Shaders/hello_triangle_shader.frag.spv");
+
+        // 2-8-2. 바이트 배열로 저장된 버퍼를 받아서 셰이더 모듈 (VkShaderModule) 를 만듭니다. 셰이더 모듈은 단순히 셰이더 바이트코드의 얇은 래퍼입니다.
+        // GPU에서 실행하기 위해 SPIR-V 바이트코드를 기계어 코드로 컴파일하고 링킹하는 작업은 그래픽 파이프라인이 생성될 때까진 발생하지 않습니다. 즉, 파이프라인 생성이 완료되는 즉시 셰이더 모듈을 파괴해도 상관없습니다. 따라서 클래스 멤버 대신 createGraphicsPipeline 함수 내 로컬 변수로 만들었습니다.
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        // 2-8-3. 셰이더 스테이지를 설정합니다. 셰이더를 사용하기 위해서는 특정한 파이프라인 스테이지에 배치하여야 합니다.
+        // 버텍스 셰이더 스테이지를 정의합니다.
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        // 이 셰이더를 어떤 파이프라인 스테이지에서 사용할지 enum 값으로 알려줍니다.
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        // 해당하는 셰이더 모듈의 핸들을 할당합니다.
+        vertShaderStageInfo.module = vertShaderModule;
+        // 진입점 (엔트리포인트 함수) 를 설정합니다. 여러 프레그먼트 셰이더들을 단일 셰이더 모듈로 결합하고 서로 다른 진입점을 사용하여 동작을 구분할 수도 있습니다.
+        vertShaderStageInfo.pName = "main";
+        // vertShaderStageInfo.pSpecializationInfo 는 사용되지 않았지만 중요합니다. 셰이더에 쓰일 상수 (constants) 에 대한 값을 지정할 수 있습니다. 셰이더를 런타임에 교환하는 것보다 상수값을 이용해 코드의 흐름을 변경시키는 것이 효과적일 때가 많습니다. 컴파일러는 이러한 상수값에 따라 if 문을 제거하는 것과 같은 최적화를 수행할 수 있기 때문입니다. 이와 같은 상수가 없으면 구조체 초기화가 자동으로 수행하는 nullptr로 멤버를 설정할 수 있습니다.
+        vertShaderStageInfo.pSpecializationInfo = nullptr;
+
+        // 프레그먼트 셰이더도 마찬가지로 스테이지를 정의합니다.
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+        fragShaderStageInfo.pSpecializationInfo = nullptr;
+
+        // 스테이지 설정값들을 묶어서 한번에 전달해야 합니다. (@@ 나중에 사용)
+        VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+
+        // ------------- 이 아래로는 프로그래밍 불가능한 스테이지에 대한 설정입니다. -------------
+
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 0;
+        vertexInputInfo.vertexAttributeDescriptionCount = 0;
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)swapChainExtent.width;
+        viewport.height = (float)swapChainExtent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        VkRect2D scissor{};
+        scissor.offset = { 0, 0 };
+        scissor.extent = swapChainExtent;
+
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.pViewports = &viewport;
+        viewportState.scissorCount = 1;
+        viewportState.pScissors = &scissor;
+
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.lineWidth = 1.0f;
+        rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.depthBiasEnable = VK_FALSE;
+
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.sampleShadingEnable = VK_FALSE;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_FALSE;
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = VK_FALSE;
+        colorBlending.logicOp = VK_LOGIC_OP_COPY;
+        colorBlending.attachmentCount = 1;
+        colorBlending.pAttachments = &colorBlendAttachment;
+        colorBlending.blendConstants[0] = 0.0f;
+        colorBlending.blendConstants[1] = 0.0f;
+        colorBlending.blendConstants[2] = 0.0f;
+        colorBlending.blendConstants[3] = 0.0f;
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 0;
+        pipelineLayoutInfo.pushConstantRangeCount = 0;
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create pipeline layout!");
+        }
+
+
+
+
+
+
+
+
+
+
+        // 다 쓴 셰이더 모듈은 소멸시킵니다.
+        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(device, vertShaderModule, nullptr);
+    }
+
+
+
+    // 바이너리 파일을 읽어서 바이트 배열로 반환합니다.
+    HELPER_FUNCTION static std::vector<char> readFile(const std::string& filename)
+    {
+        // 지정된 파일에서 모든 바이트를 읽고 바이트 배열 (std::vector) 로 저장하여 반환합니다.
+        // 두 개의 플래그 설정이 필요합니다.
+        // ate: 파일의 끝에서부터 읽기 시작 (끝에서부터 읽는 이유는 파일의 사이즈를 바로 알 수 있기 때문입니다.)
+        // binary: 파일을 바이너리 형식으로 읽기 (텍스트 변형 방지, 이진 코드이기 때문에 %%EOF 로 끝나지 않음)
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+        // 파일 열기를 시도합니다.
+        if (!file.is_open())
+        {
+            throw std::runtime_error("failed to open file!");
+        }
+
+        // ate 속성으로 파일을 열었기 때문에 파일의 끝 위치가 즉 파일 사이즈가 됩니다.
+        size_t fileSize = (size_t)file.tellg();
+        // 파일 사이즈만큼 버퍼를 준비합니다.
+        std::vector<char> buffer(fileSize);
+
+        // 커서가 파일의 맨 끝에 있으므로 맨 앞으로 가져와서 읽기 시작해야 합니다.
+        file.seekg(0);
+        // 파일을 전부 읽어서 버퍼에 몽땅 담습니다.
+        file.read(buffer.data(), fileSize);
+
+        // 파일을 다 읽었으면 닫습니다.
+        file.close();
+
+        // 바이트 배열로 저장된 버퍼를 반환합니다.
+        return buffer;
+    }
+
+    // 바이트 배열로 저장된 버퍼를 받아서 셰이더 모듈 (VkShaderModule) 를 만듭니다. 셰이더 모듈은 단순히 셰이더 바이트코드의 얇은 래퍼입니다.
+    HELPER_FUNCTION VkShaderModule createShaderModule(const std::vector<char>& code)
+    {
+        // 셰이더 모듈을 만들기 위한 설정값들을 구성합니다.
+        VkShaderModuleCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        // 1 바이트 단위로 사이즈를 설정해야 합니다. 골때리는건 아래 pCode 는 또 데이터를 4바이트 단위로 전달합니다.
+        createInfo.codeSize = code.size();
+        // pCode 는 uint32_t 형을 요구하기 때문에 캐스팅이 필요합니다. 1바이트 4개짜리 std::vector<char>(4) 는 4바이트 하나인 uint32_t 1개로 묶이기 때문에 데이터 정렬에는 이상이 없습니다.
+        createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+        // 드디어 셰이더 모듈을 만들고 그 핸들값을 저장합니다. 셰이더 모듈을 만들고 나면 code 버퍼는 소멸되어도 괜찮습니다.
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create shader module!");
+        }
+
+        // 만들어진 셰이더 모듈의 핸들을 반환합니다.
+        return shaderModule;
+    }
+
+
+
     // 3. 계속해서 매 프레임 렌더
     inline void mainLoop()
     {
@@ -862,6 +1046,9 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+
         // 이미지와 달리 이미지 뷰는 명시적으로 생성되었으므로 프로그램 종료 시 전부 지워야 합니다
         for (auto imageView : swapChainImageViews)
         {
