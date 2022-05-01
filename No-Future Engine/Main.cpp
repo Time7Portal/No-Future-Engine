@@ -119,9 +119,9 @@ private:
     VkExtent2D swapChainExtent;                         // 지정한 스왑 체인 이미지 크기
     std::vector<VkImageView> swapChainImageViews;       // 스왑 체인용 이미지 뷰들의 핸들 모음
 
-    VkRenderPass renderPass;                            // 
-    VkPipelineLayout pipelineLayout;                    // 
-
+    VkRenderPass renderPass;                            // 렌더 패스 핸들
+    VkPipelineLayout pipelineLayout;                    // 파이프라인 레이아웃 핸들
+    VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
 public:
     void run()
@@ -700,7 +700,7 @@ private:
         // 2-5-5. 이제 스왑 체인을 만들고 핸들을 얻습니다!
         if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create swap chain!");
+            throw std::runtime_error("Failed to create swap chain!");
         }
 
 
@@ -774,7 +774,8 @@ private:
             // 트리플 버퍼링 수직 동기화 모드가 가능하면 활성화
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
             {
-                return availablePresentMode;
+                // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ VK_PRESENT_MODE_FIFO_KHR 로 동작하도록 주석처리함
+                //return availablePresentMode;
             }
         }
 
@@ -851,28 +852,66 @@ private:
 
 
 
-    // 2-7. 
+    // 2-7. 렌더링에 사용할 프레임 버퍼 첨부들과 서브패스에 대한 정보를 명시합니다.
+    // 어테치먼트(첨부)는 이미지 뷰의 일종이지만 추가적으로 어떻게 읽고, 쓰고, 사용하는지에 대한 내용이 포함되어 있습니다 -  https://www.reddit.com/r/vulkan/comments/a27cid/what_is_an_attachment_in_the_render_passes/ , 처음 만나는 불칸 232페이지 참고
     void createRenderPass()
     {
+        // 파이프라인 생성을 완료하기 전에 렌더링하는 동안 사용할 프레임 버퍼 첨부 요소들에 대해 Vulkan에 알려야 합니다. 색상 및 깊이 버퍼의 수, 각각에 사용할 샘플의 수, 렌더링 작업 전반에 걸쳐 해당 내용을 처리하는 방법을 지정해야 합니다. 이 모든 정보는 새로운 createRenderPass 함수를 생성할 렌더 패스 객체에 래핑됩니다.
+
+        // 우리의 경우 스왑 체인의 이미지 중 하나로 표시되는 단일 색상 버퍼 첨부만 있을 것입니다. VkAttachmentDescription 디스크립터는 첨부의 다양한 속성을 지정하는데 사용합니다.
         VkAttachmentDescription colorAttachment{};
+        // 색상 첨부 형식은 스왑 체인 이미지 형식과 동일해야 하며 아직 멀티샘플링을 사용하지 않으므로 1개의 샘플을 사용합니다.
         colorAttachment.format = swapChainImageFormat;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        // loadOp 및 storeOp는 렌더링 전과 렌더링 후에 첨부 데이터로 수행할 작업을 결정합니다.
+        // loadOp에 대해 다음과 같은 선택 사항이 있습니다.
+        // VK_ATTACHMENT_LOAD_OP_LOAD: 기존 첨부 내용을 유지합니다.
+        // VK_ATTACHMENT_LOAD_OP_CLEAR: 시작 시 값을 상수로 지웁니다.
+        // VK_ATTACHMENT_LOAD_OP_DONT_CARE : 시작 값은 신경 안씁니다.
+        // // 우리의 경우 새 프레임을 그리기 전에 clear 작업을 사용하여 프레임 버퍼를 검은색으로 지웁니다.
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        // storeOp에는 두 가지 가능성만 있습니다.
+        // VK_ATTACHMENT_STORE_OP_STORE: 렌더링된 콘텐츠는 메모리에 저장되며 나중에 읽을 수 있습니다.
+        // VK_ATTACHMENT_STORE_OP_DONT_CARE: 프레임 버퍼의 내용은 렌더링 작업 후에 어떻게 되던 신경 안씁니다.
+        // 렌더링된 삼각형을 화면에 표시하는 데 관심이 있으므로 여기에서는 저장 작업을 수행하겠습니다.
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        // loadOp & storeOp는 색상 및 깊이 데이터에 적용되고 stencilLoadOp & stencilStoreOp 는 스텐실 데이터에 적용됩니다. 우리 응용 프로그램은 스텐실 버퍼로 아무 것도 하지 않으므로 로드 및 저장 결과는 관련이 없습니다.
         colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        // Vulkan의 텍스처와 프레임 버퍼는 특정 픽셀 형식의 VkImage 개체로 표시되지만 메모리에 픽셀을 정렬하는 방식인 픽셀 레이아웃은 이미지로 수행하려는 작업에 따라 변경될 수 있습니다.
+        // 가장 일반적인 레이아웃은 다음과 같습니다.
+        // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: 색상 첨부로 사용되는 이미지
+        // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : 스왑 체인에 표시할 이미지
+        // VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : 메모리 복사 작업의 대상으로 사용할 이미지
+        // 텍스처링 장에서 이 주제에 대해 더 깊이 논의할 것이지만 지금 알아야 할 중요한 것은 이미지가 다음에 포함될 작업에 적합한 특정 레이아웃으로 전환되어야 한다는 것입니다.
+        // initialLayout은 렌더 패스가 시작되기 전에 이미지가 가질 레이아웃을 지정합니다. finalLayout은 렌더 패스가 완료될 때 자동으로 전환할 레이아웃을 지정합니다. initialLayout에 VK_IMAGE_LAYOUT_UNDEFINED 를 사용한다는 것은 이미지가 어떤 이전 레이아웃에 있던지 신경 쓰지 않는다는 것을 의미합니다. 이 값의 주의 사항으로 이미지의 내용이 보존된다는 보장이 없지만 우리가 계속해서 클리어 할 것이기 때문에 중요하지 않다는 것입니다. 렌더링 후 스왑 체인을 사용하여 이미지를 표시할 준비가 되기를 원합니다. 이것이 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR을 finalLayout으로 사용하는 이유입니다.
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+
+        // 서브패스 및 첨부 파일 속성 설정
+        // 하나의 렌더 패스는 여러 서브(하위)패스로 구성될 수 있습니다. 서브패스는 이전 패스의 프레임 버퍼 내용에 따라 달라지는 후속 렌더링 작업입니다(예: 차례로 적용되는 후처리 효과 시퀀스). 이러한 렌더링 작업을 하나의 렌더 패스로 그룹화하면 Vulkan은 작업을 재정렬하고 더 나은 성능을 위해 메모리 대역폭을 절약할 수 있습니다. 그러나 첫 번째 삼각형의 경우 단일 서브패스를 사용합니다.
+        // 모든 서브패스는 하나 이상의 첨부를 참조합니다. 이러한 참조는 다음과 같은 VkAttachmentReference 구조체로 표현합니다.
+        // Attachment 파라미터는 어떤 첨부를 참조할지 디스크립터 배열의 인덱스를 지정합니다. 우리의 배열은 단일 VkAttachmentDescription으로 구성되어 있으므로 인덱스는 0입니다. Vulkan은 서브패스가 시작될 때 자동으로 첨부 파일을 이 레이아웃으로 전환합니다. 첨부 파일을 사용하여 색상 버퍼 기능을 수행할 예정이며 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL 레이아웃은 이름에서 알 수 있듯이 최고의 성능을 제공합니다.
         VkAttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+        // 서브패스는 VkSubpassDescription 구조를 사용하여 설명됩니다.
         VkSubpassDescription subpass{};
+        // Vulkan은 향후 컴퓨팅 서브패스도 지원할 수 있으므로 이것이 그래픽 서브패스임을 명시해야 합니다. 다음으로 색상 첨부 파일에 대한 참조를 지정합니다.
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        // 이 배열의 첨부 인덱스는 layout(location = 0) out vec4 outColor 지시문을 사용하여 프래그먼트 셰이더에서 직접 참조됩니다!
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
+        // 다음과 같은 다른 유형의 첨부도 추가로 서브패스에서 참조할 수 있습니다.
+        // pInputAttachments : 셰이더에서 읽어온 첨부
+        // pResolveAttachments : 멀티샘플링 색상 첨부 파일에 사용되는 첨부
+        // pDepthStencilAttachment : 깊이 및 스텐실 데이터에 대한 첨부
+        // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 첨부
 
+
+        // 그런 다음 VkRenderPassCreateInfo 구조를 첨부 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 첨부를 참조합니다.
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 1;
@@ -880,8 +919,11 @@ private:
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
 
-        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create render pass!");
+
+        // 이제 렌더 패스 객체를 생성합니다!
+        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create render pass!");
         }
     }
 
@@ -1084,19 +1126,33 @@ private:
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
 
-        // 2-8-15. 파이프라인 레이아웃을 만듭니다!
+        // 2-8-15. 파이프라인 레이아웃을 만듭니다.
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create pipeline layout!");
+            throw std::runtime_error("Failed to create pipeline layout!");
         }
 
 
+        // 2-8-16. 그래픽스 파이프라인을 만듭니다.
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = 0;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-
-
-
-
-
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create graphics pipeline!");
+        }
 
         
         // 다 쓴 셰이더 모듈은 소멸시킵니다.
@@ -1180,10 +1236,13 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 
+        vkDestroyPipeline(device, graphicsPipeline, nullptr);
+
         // 파이프라인 레이아웃은 프로그램 수명 내내 참조되므로 마지막에 삭제해야 합니다.
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
-        //
+        // 파이프라인 레이아웃과 마찬가지로 렌더 패스는 프로그램 전체에서 참조되므로 마지막에만 정리해야 합니다.
         vkDestroyRenderPass(device, renderPass, nullptr);
 
         // 이미지와 달리 이미지 뷰는 명시적으로 생성되었으므로 프로그램 종료 시 전부 지워야 합니다.
