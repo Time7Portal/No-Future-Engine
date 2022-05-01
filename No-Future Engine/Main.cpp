@@ -117,9 +117,9 @@ private:
     std::vector<VkImage> swapChainImages;               // 이제 스왑 체인이 생성되었으므로 남은 것은 그 안에 있는 스왑 체인용 이미지들(VkImages) 의 핸들을 받는 것입니다. 렌더링 작업 중에 이를 참조할 것입니다. 이미지는 스왑 체인 구현과 함께 생성하며 스왑 체인이 파괴되면 자동으로 소멸됩니다.
     VkFormat swapChainImageFormat;                      // 지정한 스왑 체인 이미지 형식
     VkExtent2D swapChainExtent;                         // 지정한 스왑 체인 이미지 크기
-
     std::vector<VkImageView> swapChainImageViews;       // 스왑 체인용 이미지 뷰들의 핸들 모음
 
+    VkRenderPass renderPass;                            // 
     VkPipelineLayout pipelineLayout;                    // 
 
 
@@ -181,7 +181,7 @@ private:
        
         createImageViews();         // 2-6. 스왑 체인용 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
 
-        //createRenderPass();         // 2-7.
+        createRenderPass();         // 2-7. 렌더 패스 생성
 
         createGraphicsPipeline();   // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
 
@@ -659,15 +659,18 @@ private:
         createInfo.imageFormat = surfaceFormat.format;
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
-        createInfo.imageArrayLayers = 1; // 양안 3D 렌더링을 하지 않는 이상 이미지 레이어 수는 항상 1 입니다.
-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // 스왑 체인에서 어떤 연산으로 이미지를 사용할 지 지정합니다. 우리는 이미지를 이용해서 바로 렌더링을 할 것이므로 COLOR_ATTACHMENT 로 사용합니다. 나중에 포스트-프로세싱 이펙트 같은 것들을 위해 이 값을 VK_IMAGE_USAGE_TRANSFER_DST_BIT 로 설정하여 메모리 연산을 이용해 최종 스왑 체인 이미지로 전송할 수도 있습니다.
+        // 양안 3D 렌더링을 하지 않는 이상 이미지 레이어 수는 항상 1 입니다.
+        createInfo.imageArrayLayers = 1; 
+        // 스왑 체인에서 어떤 연산으로 이미지를 사용할 지 지정합니다. 우리는 이미지를 이용해서 바로 렌더링을 할 것이므로 COLOR_ATTACHMENT 로 사용합니다. 나중에 포스트-프로세싱 이펙트 같은 것들을 위해 이 값을 VK_IMAGE_USAGE_TRANSFER_DST_BIT 로 설정하여 메모리 연산을 이용해 최종 스왑 체인 이미지로 전송할 수도 있습니다.
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
 
         // 2-5-4. 다음으로, 여러 큐 패밀리에서 사용될 스왑 체인 이미지를 처리하는 방법을 지정해야 합니다. 현재 애플리케이션의 경우 그래픽 큐 패밀리와 프레젠테이션 큐 페밀리가 다르게 사용됩니다. 따라서 그래픽 큐에서 스왑 체인의 이미지를 그린 다음 프레젠테이션 큐에 제출합니다.
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
         uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
-        if (indices.graphicsFamily != indices.presentFamily) {
+        if (indices.graphicsFamily != indices.presentFamily)
+        {
             // 여러 큐에서 이미지를 엑세스하는 두 가지 방식이 있습니다.
             // 1) VK_SHARING_MODE_EXCLUSIVE: 이미지는 한 번에 하나의 큐 패밀리가 소유하며 소유권은 다른 큐 패밀리에서 사용하기 전에 명시적으로 설정되어야 합니다. 이 옵션은 최상의 성능을 제공합니다.
             // 2) VK_SHARING_MODE_CONCURRENT: 명시적 소유권 이전 없이 여러 대기열 패밀리에서 이미지를 사용할 수 있습니다. 이 옵션은 코딩하기 편합니다.
@@ -677,7 +680,8 @@ private:
             createInfo.queueFamilyIndexCount = 2;
             createInfo.pQueueFamilyIndices = queueFamilyIndices;
         }
-        else {
+        else
+        {
             createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         }
 
@@ -847,6 +851,42 @@ private:
 
 
 
+    // 2-7. 
+    void createRenderPass()
+    {
+        VkAttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChainImageFormat;
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        VkAttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
+
+        VkRenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+
+        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create render pass!");
+        }
+    }
+
+
+
     // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
     inline void createGraphicsPipeline()
     {
@@ -887,29 +927,59 @@ private:
 
 
         // ------------- 이 아래로는 프로그래밍 불가능한 스테이지에 대한 설정입니다. -------------
+        
+        // 이전 세대 그래픽스 API 에서는 그래픽스 파이프라인의 대부분의 단계에 대해 기본 설정을 제공하지만, 불칸은 모든 것들을 직접 다 설정해야 합니다.
 
+        // 2-8-4. 버텍스 셰이더에 어떤 형식으로 버텍스 데이터를 집어넣을지 설정합니다. pVertexBindingDescriptions 및 pVertexAttributeDescriptions 멤버는 정점 데이터를 로드하기 위해 앞서 언급한 세부 정보를 설명하는 구조체 배열을 가리킵니다.
+        // 버텍스 데이터 형식은 크게 두가지 방법으로 표현됩니다.
+        // Bindings: 데이터 사이의 간격 및 데이터가 버텍스당인지 또는 인스턴스당인지 여부( 인스턴싱 참조 )
+        // Attribute descriptions : 정점 셰이더에 전달된 속성의 유형, 속성을 로드할 바인딩 및 오프셋
+        // @@ 일단 현재는 버텍스 데이터를 셰이더에 하드 코딩 했으므로 읽어들일 정점 정보가 없습니다. 나중에 버텍스 버퍼를 받을때 사용하겠습니다.
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vertexInputInfo.vertexBindingDescriptionCount = 0;
+        vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
         vertexInputInfo.vertexAttributeDescriptionCount = 0;
+        vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
 
+
+        // 2-8-5. 버텍스 데이터들을 가지고 어떤 방식으로 지오메트리를 그릴지, 그리고 다른 프리미티브로 그리기 여부를 설정합니다. 일반적으로 버텍스은 인덱스에 따라 버텍스 버퍼에서 순차적으로 로드되지만 element 버퍼 를 사용하면 인덱스를 지정하여 사용할 수 있습니다. 이를 통해 버텍스 재사용과 같은 최적화를 수행할 수 있습니다. primitiveRestartEnable 멤버를 VK_TRUE로 설정하면 0xFFFF 또는 0xFFFFFFFF 같은 특수 인덱스를 사용하여 _STRIP 토폴로지 모드에서 선과 삼각형을 분할할 수 있습니다.
+        // 지오메트리를 그리는 방식 (토폴로지) 은 다음과 같은 종류가 있습니다.
+        // VK_PRIMITIVE_TOPOLOGY_POINT_LIST :       각각의 점으로 그리기
+        // VK_PRIMITIVE_TOPOLOGY_LINE_LIST :        재사용하지 않고 모든 2개의 점을 이어서 라인으로 그리기
+        // VK_PRIMITIVE_TOPOLOGY_LINE_STRIP :       모든 라인의 끝 정점은 다음 라인의 시작 정점으로 사용합니다.
+        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST :    재사용하지 않고 3개의 정점마다 삼각형 그리기
+        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP :   모든 삼각형의 두 번째와 세 번째 정점은 다음 삼각형의 처음 두 정점으로 사용합니다.
+        // @@ 일단 현재는 듀토리얼을 위해 정점으로 삼각형 (TRIANGLE_LIST) 을 그립니다.
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
+
+        // 2-8-6. 뷰포트 영역을 설정합니다.
+        // 뷰포트는 기본적으로 출력이 렌더링될 프레임 버퍼의 영역을 설명합니다. 이것은 거의 항상 (0, 0) ~ (너비, 높이) 입니다.
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
+        // 스왑 체인 이미지들이 나중에 프레임 버퍼로 사용될 것입니다.
         viewport.width = (float)swapChainExtent.width;
         viewport.height = (float)swapChainExtent.height;
+        // 프레임 버퍼에서 사용할 깊이 값 범위를 설정합니다. 반드시 0 ~ 1 범위 내에서만 설정해야 합니다.
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
 
+
+        // 2-8-7. 시저 영역을 설정합니다.
+        // 뷰포트는 이미지에서 프레임 버퍼로의 변환을 정의하는 반면 시저 직사각형은 픽셀이 실제로 저장될 영역을 정의합니다. 시저 직사각형 외부의 모든 픽셀은 래스터라이저에 의해 연산되지 않고 무시됩니다. 변환이 아니라 필터처럼 작동하므로 성능 향상을 볼 수 있습니다. 차이점은 이 이미지를 참고해주세요 - https://vulkan-tutorial.com/images/viewports_scissors.png
+        // @@ 일단 지금은 화면 전부를 보여주기 위해 프레임 버퍼 크기만큼 덮는 시저로 설정합니다.
         VkRect2D scissor{};
         scissor.offset = { 0, 0 };
         scissor.extent = swapChainExtent;
 
+
+        // 2-8-8. 뷰포트와 시저 영역 설정들을 결합합니다.
+        // 뷰포트와 시저 영역 설정은 VkPipelineViewportStateCreateInfo 구조체를 사용하여 뷰포트 스테이트로 결합되어야 합니다. 일부 그래픽 카드에서는 여러 뷰포트와 가위형 직사각형을 사용할 수 있으므로 해당 멤버는 해당 그래픽 카드의 배열을 참조합니다. 여러 개를 사용하려면 GPU 기능을 활성화해야 합니다 (추상적 장치 생성 참조).
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
@@ -917,41 +987,104 @@ private:
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
 
+
+        // 2-8-9. 레스터라이저를 설정합니다.
+        // 래스터라이저는 버텍스 셰이더에서 만들어진 지오메트리를 가져와 프레그먼트 셰이더를 가지고 색칠된 조각으로 바꿉니다. 또한 depth testing, face culling, scissor test 를 수행하며 전체 다각형 또는 가장자리(와이어프레임 렌더링)만 그리도록 구성할 수도 있습니다. 이 모든 것은 VkPipelineRasterizationStateCreateInfo 로 설정합니다.
         VkPipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        // depthClampEnable이 VK_TRUE로 설정되면 뷰 프러스텀 근거리 평면보다 안쪽 또는 원거리 평면 너머에 있는 픽셀들의 z 값을 뷰 프러스텀 범위 내로 클램핑 합니다. 이것은 그림자 맵과 같은 특수한 경우에 유용합니다. 이를 사용하려면 GPU 기능을 활성화해야 합니다.
         rasterizer.depthClampEnable = VK_FALSE;
+        // rasterizerDiscardEnable이 VK_TRUE로 설정되면 지오메트리는 래스터라이저 단계를 거치지 않습니다. 이것은 기본적으로 프레임 버퍼에 대한 모든 출력을 비활성화합니다.
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        // 폴리곤 모드는 지오메트리에 대해 프래그먼트가 생성되는 방법을 결정합니다. 다음 모드를 사용할 수 있습니다.
+        // VK_POLYGON_MODE_FILL: 다각형을 색으로 채우기
+        // VK_POLYGON_MODE_LINE : 와이어프레임 모드
+        // VK_POLYGON_MODE_POINT : 점들만 표히사는 모드
+        // 채우기 이외의 모드를 사용하려면 GPU 기능을 활성화해야 합니다.
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        // 레스터화에 사용할 선분의 굵기를 설정합니다. 지원되는 최대 라인 너비는 그래픽 카드에 따라 다르며 1.0f 보다 두꺼운 라인은 wideLines GPU 기능을 활성화해야 합니다.
         rasterizer.lineWidth = 1.0f;
+        // 표면 컬링 유형을 결정합니다. 컬링을 비활성화하거나, 앞면을 컬링하거나, 뒷면을 컬링하거나, 둘 모두를 컬링할 수 있습니다. frontFace 변수는 정면으로 간주되는 면의 꼭짓점 순서를 지정하며 시계 방향 (왼손 중심) 또는 시계 반대 방향 (오른손 중심) 일 수 있습니다.
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
         rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        // 바이어스 값을 사용하여 (상수를 더해) 깊이 값을 계산합니다. 이것은 때때로 그림자 매핑에 사용되지만 우리는 사용하지 않을 것입니다. depthBiasEnable을 VK_FALSE로 설정하기만 하면 됩니다.
         rasterizer.depthBiasEnable = VK_FALSE;
+        rasterizer.depthBiasConstantFactor = 0.0f; // Optional
+        rasterizer.depthBiasClamp = 0.0f; // Optional
+        rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
 
+
+        // 2-8-10. 멀티샘플링을 설정합니다.
+        // VkPipelineMultisampleStateCreateInfo 구조체는 안티앨리어싱을 수행하는 방법 중 하나인 멀티샘플링을 구성합니다. 동일한 픽셀에서 여러 다각형의 프레그먼트 셰이더 결과를 결합하여 작동합니다. 이것은 주로 가장 눈에 띄는 앨리어싱 아티팩트가 발생하는 가장자리 계단 현상을 해결합니다. 하나의 폴리곤만 픽셀에 매핑되는 경우 프래그먼트 셰이더를 여러 번 실행할 필요가 없기 때문에 단순히 더 높은 해상도로 렌더링한 다음 축소하는 것보다 훨씬 저렴합니다. 활성화하려면 GPU 기능을 활성화해야 합니다. 지금은 비활성화 상태로 둡니다.
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisampling.minSampleShading = 1.0f; // Optional
+        multisampling.pSampleMask = nullptr; // Optional
+        multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+        multisampling.alphaToOneEnable = VK_FALSE; // Optional
 
+
+        // 2-8-11. 깊이 및 스텐실 테스팅을 설정합니다.
+        // 깊이 및/또는 스텐실 버퍼를 사용하는 경우 VkPipelineDepthStencilStateCreateInfo를 사용하여 깊이 및 스텐실 테스트도 구성해야 합니다. 지금 당장은 없으므로 그러한 구조체에 대한 포인터 대신 nullptr을 전달할 수 있습니다. 깊이 버퍼링 장에서 다시 다루겠습니다.
+        // @@ ---아직은 코드없음---
+
+
+        // 2-8-12. 컬러 블랜딩을 설정합니다.
+        // 프레그먼트 셰이더가 색상을 반환한 후에는 이미 프레임 버퍼에 있는 색상과 결합해야 합니다. 이 변환을 색상 혼합이라고 하며 두 가지 방법으로 수행할 수 있습니다.
+        // 1) 이전 값과 새 값을 혼합하여 최종 색상 생성
+        // 2) 비트 연산을 사용하여 이전 값과 새 값 결합 (logicOpEnable을 VK_TRUE로 설정해야 합니다.)
+        // 색상 혼합을 설정하는 두 가지 유형의 구조체가 있습니다. VkPipelineColorBlendAttachmentState 는 프레임버퍼당 설정이고 두 번째 VkPipelineColorBlendStateCreateInfo 는 전역적인 색상 혼합 설정이 들어있습니다. 우리의 경우에는 하나의 프레임 버퍼만 있습니다.
+        // 색상 혼합을 사용하는 가장 일반적인 방법은 불투명도에 따라 새 색상을 이전 색상과 혼합하려는 알파 블랜딩을 구현하는 것입니다. 컬러 블랜딩에 아래 설정들이 어떻게 활용되는지는 다음 사이트의 의사 코드를 참고해 주세요. - https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics/Fixed_functions 
         VkPipelineColorBlendAttachmentState colorBlendAttachment{};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        // 색상 블랜딩을 하지 않고 최신 색상만 표시합니다.
         colorBlendAttachment.blendEnable = VK_FALSE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
 
+        // 두 번째 구조는 모든 프레임 버퍼에 대한 구조 배열을 참조하며 앞서 언급한 계산에서 혼합 계수로 사용할 수 있는 혼합 상수를 설정할 수 있습니다.
+        // 두 번째 혼합 방법(비트 조합)을 사용하려면 logicOpEnable을 VK_TRUE로 설정해야 합니다. 그런 다음 비트 연산을 logicOp 필드에 지정할 수 있습니다. 첫 번째 혼합 방법을 위해 blendEnable을 VK_FALSE로 설정한 것처럼 이렇게 하면 연결된 모든 프레임 버퍼에 대해 자동으로 비활성화됩니다. colorWriteMask는 또한 이 모드에서 실제로 영향을 받을 프레임 버퍼의 채널을 결정하는 데 사용됩니다. 여기에서 했던 것처럼 두 모드를 모두 비활성화할 수도 있습니다. 이 경우 프레그먼트 색상이 블랜딩 되지 않은 상태로 프레임 버퍼에 바로 기록됩니다.
         VkPipelineColorBlendStateCreateInfo colorBlending{};
         colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         colorBlending.logicOpEnable = VK_FALSE;
-        colorBlending.logicOp = VK_LOGIC_OP_COPY;
+        colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
-        colorBlending.blendConstants[0] = 0.0f;
-        colorBlending.blendConstants[1] = 0.0f;
-        colorBlending.blendConstants[2] = 0.0f;
-        colorBlending.blendConstants[3] = 0.0f;
+        colorBlending.blendConstants[0] = 0.0f; // Optional
+        colorBlending.blendConstants[1] = 0.0f; // Optional
+        colorBlending.blendConstants[2] = 0.0f; // Optional
+        colorBlending.blendConstants[3] = 0.0f; // Optional
 
+
+        // 2-8-13. 동적 스테이트를 설정합니다.
+        // 위에서 우리가 만들었던 설정값들은 사실 파이프라인을 완전히 새로 만들지 않고도 변경할 수 있습니다. 뷰포트의 크기, 선 너비 및 블렌드 상수가 그 예입니다. 그렇게 하려면 다음과 같이 VkPipelineDynamicStateCreateInfo 구조를 채워야 합니다. 이렇게 하면 이러한 값의 구성이 무시되고 드로잉 시(런타임) 에 데이터를 지정해야 합니다. 이에 대해서는 다음 장에서 다시 다루겠습니다. 이 구조체는 나중에 동적 상태가 없는 경우 nullptr로 대체될 수 있습니다.
+        //std::vector<VkDynamicState> dynamicStates = {
+        //    VK_DYNAMIC_STATE_VIEWPORT,
+        //    VK_DYNAMIC_STATE_LINE_WIDTH
+        //};
+        //VkPipelineDynamicStateCreateInfo dynamicState{};
+        //dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        //dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        //dynamicState.pDynamicStates = dynamicStates.data();
+
+
+        // 2-8-14. 파이프라인 레이아웃을 설정합니다.
+        // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 정점 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 0;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
+        pipelineLayoutInfo.setLayoutCount = 0; // Optional
+        pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+        pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+        pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
+
+        // 2-8-15. 파이프라인 레이아웃을 만듭니다!
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create pipeline layout!");
@@ -965,7 +1098,7 @@ private:
 
 
 
-
+        
         // 다 쓴 셰이더 모듈은 소멸시킵니다.
         vkDestroyShaderModule(device, fragShaderModule, nullptr);
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
@@ -974,6 +1107,7 @@ private:
 
 
     // 바이너리 파일을 읽어서 바이트 배열로 반환합니다.
+    // @@ 나중에 C 스타일로 바꿔서 성능 향상 가능할 듯..
     HELPER_FUNCTION static std::vector<char> readFile(const std::string& filename)
     {
         // 지정된 파일에서 모든 바이트를 읽고 바이트 배열 (std::vector) 로 저장하여 반환합니다.
@@ -985,7 +1119,7 @@ private:
         // 파일 열기를 시도합니다.
         if (!file.is_open())
         {
-            throw std::runtime_error("failed to open file!");
+            throw std::runtime_error("Failed to open file!");
         }
 
         // ate 속성으로 파일을 열었기 때문에 파일의 끝 위치가 즉 파일 사이즈가 됩니다.
@@ -1046,10 +1180,13 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
-        // 
+        // 파이프라인 레이아웃은 프로그램 수명 내내 참조되므로 마지막에 삭제해야 합니다.
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
-        // 이미지와 달리 이미지 뷰는 명시적으로 생성되었으므로 프로그램 종료 시 전부 지워야 합니다
+        //
+        vkDestroyRenderPass(device, renderPass, nullptr);
+
+        // 이미지와 달리 이미지 뷰는 명시적으로 생성되었으므로 프로그램 종료 시 전부 지워야 합니다.
         for (auto imageView : swapChainImageViews)
         {
             vkDestroyImageView(device, imageView, nullptr);
