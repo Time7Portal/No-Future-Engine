@@ -24,6 +24,9 @@
 // 윈도우 해상도
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
+// 
+const int MAX_FRAMES_IN_FLIGHT = 2;
+
 
 // 필요한 검증 레이어 목록
 const std::vector<const char*> validationLayers {
@@ -127,6 +130,9 @@ private:
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
     VkCommandBuffer commandBuffer;                      // 커맨드 버퍼. 커멘드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 명령 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
 
+    VkSemaphore imageAvailableSemaphores;               // 
+    VkSemaphore renderFinishedSemaphores;               // 
+    VkFence inFlightFence;                              // 
 
 public:
     void run()
@@ -196,7 +202,7 @@ private:
 
         createCommandBuffer();      // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
 
-        //createSyncObjects();        // 2-12. 
+        createSyncObjects();        // 2-12. 
 
     }
 
@@ -919,6 +925,20 @@ private:
         // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 어태치먼트
 
 
+
+        // @@
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+
+
+
+
         // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다.
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -926,6 +946,8 @@ private:
         renderPassInfo.pAttachments = &colorAttachment;
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 1; //@@
+        renderPassInfo.pDependencies = &dependency; //@@
 
 
         // 이제 렌더 패스 객체를 생성합니다!
@@ -1391,6 +1413,28 @@ private:
 
 
 
+
+    inline void createSyncObjects()
+    {
+        VkSemaphoreCreateInfo semaphoreInfo{};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores) != VK_SUCCESS ||
+            vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores) != VK_SUCCESS ||
+            vkCreateFence(device, &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create synchronization objects for a frame!");
+        }
+
+    }
+
+
+
+
     // 3. 계속해서 매 프레임 렌더
     inline void mainLoop()
     {
@@ -1401,13 +1445,69 @@ private:
             glfwPollEvents();
 
             // @@@ 여기서 매 프레임을 랜더링 할 예정
+            drawFrame();
         }
+
+        // 
+        vkDeviceWaitIdle(device);
+    }
+
+    HELPER_FUNCTION void drawFrame()
+    {
+        vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+        vkResetFences(device, 1, &inFlightFence);
+
+        uint32_t imageIndex;
+        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores, VK_NULL_HANDLE, &imageIndex);
+
+        vkResetCommandBuffer(commandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
+        recordCommandBuffer(commandBuffer, imageIndex);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores };
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signalSemaphores;
+
+        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to submit draw command buffer!");
+        }
+
+        VkPresentInfoKHR presentInfo{};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = signalSemaphores;
+
+        VkSwapchainKHR swapChains[] = { swapChain };
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapChains;
+
+        presentInfo.pImageIndices = &imageIndex;
+
+        vkQueuePresentKHR(presentQueue, &presentInfo);
     }
 
 
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 
+        vkDestroySemaphore(device, renderFinishedSemaphores, nullptr);
+        vkDestroySemaphore(device, imageAvailableSemaphores, nullptr);
+        vkDestroyFence(device, inFlightFence, nullptr);
+
         // 명령은 프로그램 전체에서 화면에 무언가를 그리는 데 사용되므로 풀은 마지막에만 파괴되어야 합니다.
         vkDestroyCommandPool(device, commandPool, nullptr);
 
