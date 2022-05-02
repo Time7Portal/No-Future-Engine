@@ -124,6 +124,9 @@ private:
     VkPipelineLayout pipelineLayout;                    // 파이프라인 레이아웃 핸들
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
+    VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
+    VkCommandBuffer commandBuffer;                      // 커맨드 버퍼
+
 public:
     void run()
     {
@@ -188,9 +191,9 @@ private:
 
         createFramebuffers();       // 2-9. 프레임 버퍼들을 생성
 
-        //createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
+        createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        //createCommandBuffers();     // 2-11. 
+        createCommandBuffer();      // 2-11. 
 
         //createSyncObjects();        // 2-12. 
 
@@ -1270,6 +1273,74 @@ private:
 
 
 
+    void createCommandPool()
+    {
+        // 그리기 작업 및 메모리 전송과 같은 Vulkan의 명령은 함수 호출을 사용하여 직접 실행되지 않습니다. 명령 버퍼 개체에 수행하려는 모든 작업을 기록해야 합니다. 이것의 장점은 우리가 하고 싶은 것을 Vulkan 에게 한꺼번에 전달하고 Vulkan이 모든 명령을 함께 사용할 수 있기 때문에 명령을 더 효율적으로 처리할 수 있습니다. 또한 원하는 경우 여러 스레드에서 명령 기록을 수행할 수도 있습니다.
+        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+
+        VkCommandPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+
+        if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create command pool!");
+        }
+    }
+
+    void createCommandBuffer()
+    {
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+
+        if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to allocate command buffers!");
+        }
+    }
+
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+    {
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to begin recording command buffer!");
+        }
+
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = swapChainExtent;
+
+        VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearColor;
+
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+        vkCmdEndRenderPass(commandBuffer);
+
+        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to record command buffer!");
+        }
+    }
+
+
+
+
     // 3. 계속해서 매 프레임 렌더
     inline void mainLoop()
     {
@@ -1287,6 +1358,9 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 
+        vkDestroyCommandPool(device, commandPool, nullptr);
+
         // 이미지 뷰들과 랜더패스를 지우기 전에 먼저 이들을 사용하고 있는 프레임 버퍼를 삭제해야 합니다.
         for (auto framebuffer : swapChainFramebuffers)
         {
