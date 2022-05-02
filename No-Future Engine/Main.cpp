@@ -125,7 +125,8 @@ private:
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
-    VkCommandBuffer commandBuffer;                      // 커맨드 버퍼
+    VkCommandBuffer commandBuffer;                      // 커맨드 버퍼. 커멘드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 명령 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
+
 
 public:
     void run()
@@ -191,9 +192,9 @@ private:
 
         createFramebuffers();       // 2-9. 프레임 버퍼들을 생성
 
-        createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀 생성 : 추후 command buffer allocation 에 사용할 예정
+        createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀(명령 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createCommandBuffer();      // 2-11. 
+        createCommandBuffer();      // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
 
         //createSyncObjects();        // 2-12. 
 
@@ -616,7 +617,7 @@ private:
         }
 
 
-        // 2-4-5. 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. 큐 패밀리가 동일한 경우 graphicsQueue 와 presentQueue 핸들은 동일한 값을 가질 가능성이 높습니다. 대기열 패밀리가 동일한게 확실한 경우 해당 인덱스를 한 번만 전달해도 됩니다. vkGetDeviceQueue(추상적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
+        // 2-4-5. 각각의 큐 페밀리에 해당하는 큐 핸들을 받아옵니다. 큐 패밀리가 동일한 경우 graphicsQueue 와 presentQueue 핸들은 동일한 값을 가질 가능성이 높습니다. 큐 패밀리가 동일한게 확실한 경우 해당 인덱스를 한 번만 전달해도 됩니다. vkGetDeviceQueue(추상적 디바이스, 큐 페밀리 인덱스, 큐 인덱스, 큐 핸들을 저장할 변수에 대한 포인터)
         vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 
@@ -677,10 +678,10 @@ private:
         {
             // 여러 큐에서 이미지를 엑세스하는 두 가지 방식이 있습니다.
             // 1) VK_SHARING_MODE_EXCLUSIVE: 이미지는 한 번에 하나의 큐 패밀리가 소유하며 소유권은 다른 큐 패밀리에서 사용하기 전에 명시적으로 설정되어야 합니다. 이 옵션은 최상의 성능을 제공합니다.
-            // 2) VK_SHARING_MODE_CONCURRENT: 명시적 소유권 이전 없이 여러 대기열 패밀리에서 이미지를 사용할 수 있습니다. 이 옵션은 코딩하기 편합니다.
+            // 2) VK_SHARING_MODE_CONCURRENT: 명시적 소유권 이전 없이 여러 큐 패밀리에서 이미지를 사용할 수 있습니다. 이 옵션은 코딩하기 편합니다.
             createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
             // 동시 모드를 사용하려면 queueFamilyIndexCount 및 pQueueFamilyIndices 매개변수를 사용하여 공유할 큐 패밀리 소유권을 미리 지정해야 합니다.
-            // 그래픽 큐 페밀리와 프레젠테이션 큐 페밀리가 동일한 경우(대부분의 하드웨어에서 마찬가지입니다.) 동시 모드에서는 최소 두 개의 고유한 대기열 제품군을 지정해야 하므로 VK_SHARING_MODE_EXCLUSIVE (배타적 모드)를 사용해야 합니다.
+            // 그래픽 큐 페밀리와 프레젠테이션 큐 페밀리가 동일한 경우(대부분의 하드웨어에서 마찬가지입니다.) 동시 모드에서는 최소 두 개의 고유한 큐 제품군을 지정해야 하므로 VK_SHARING_MODE_EXCLUSIVE (배타적 모드)를 사용해야 합니다.
             createInfo.queueFamilyIndexCount = 2;
             createInfo.pQueueFamilyIndices = queueFamilyIndices;
         }
@@ -817,7 +818,7 @@ private:
 
 
     // 2-6. 스왑 체인용 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
-    void createImageViews()
+    inline void createImageViews()
     {
         // 스왑 체인을 포함하여 모든 VkImage 이미지 개체는 렌더 파이프라인에서 이미지 사용 방식인 VkImageView 개체를 만들어야 이미지를 사용할 수 있습니다. 이미지 사용 방식의 예는 2D 텍스쳐를 밉맵핑 없이 단순 뎁스 맵으로 인식하게 하는 것 등이 있습니다. 지금으로썬 createImageViews() 는 스왑 체인의 모든 이미지들에 대해 칼라 타겟으로 사용하는 가장 기본적인 이미지 뷰를 제공합니다.
 
@@ -857,7 +858,7 @@ private:
 
 
     // 2-7. 렌더 패스 생성. 렌더링에 사용할 프레임 버퍼 어태치먼트들과 서브패스에 대한 정보를 명시합니다.
-    void createRenderPass()
+    inline void createRenderPass()
     {
         // 어테치먼트(어태치먼트)는 프레임 버퍼에 사용된 이미지 뷰입니다. 프레임 버퍼에 어태치먼트되었다고 하여 어태치먼트라 부릅니다. 렌더링의 대상이 될 어테치먼트를 렌더 타켓이라고 부르기도 합니다.
         // https://www.reddit.com/r/vulkan/comments/a27cid/what_is_an_attachment_in_the_render_passes/
@@ -1240,7 +1241,7 @@ private:
 
 
     // 2-9. 프레임 버퍼들을 생성
-    void createFramebuffers()
+    inline void createFramebuffers()
     {
         // 렌더 패스 생성 중에 지정된 어태치먼트는 VkFramebuffer 개체로 래핑하여 바인딩됩니다. 프레임 버퍼 개체는 어태치먼트를 나타내는 모든 VkImageView 개체를 참조합니다. 우리의 경우 그것은 단 하나일 것입니다: 색상 어태치먼트. 그러나 어태치먼트에 사용해야 하는 이미지는 프레젠테이션을 위해 스왑 체인이 반환하는 이미지에 따라 다릅니다. 때문에 스왑 체인에 들어있는 모든 이미지들에 대해 프레임 버퍼를 생성하고 드로잉 시 회수된 이미지에 해당하는 프레임 버퍼를 사용해야 합니다.
         swapChainFramebuffers.resize(swapChainImageViews.size());
@@ -1273,71 +1274,120 @@ private:
 
 
 
-    void createCommandPool()
+    // 2-10. 그래픽 카드로 보낼 명령 풀(명령 버퍼 모음) 생성
+    inline void createCommandPool()
     {
         // 그리기 작업 및 메모리 전송과 같은 Vulkan의 명령은 함수 호출을 사용하여 직접 실행되지 않습니다. 명령 버퍼 개체에 수행하려는 모든 작업을 기록해야 합니다. 이것의 장점은 우리가 하고 싶은 것을 Vulkan 에게 한꺼번에 전달하고 Vulkan이 모든 명령을 함께 사용할 수 있기 때문에 명령을 더 효율적으로 처리할 수 있습니다. 또한 원하는 경우 여러 스레드에서 명령 기록을 수행할 수도 있습니다.
         QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        // 명령 풀에는 두 가지 가능한 플래그가 있습니다.
+        // VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: 명령 버퍼가 새 명령으로 매우 자주 다시 기록된다는 힌트를 줍니다. (메모리 할당 동작이 변경될 수 있음)
+        // VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : 명령 버퍼가 개별적으로 다시 기록되도록 허용합니다. 이 플래그가 없으면 vkResetCommandPool을 사용해 모두 함께 재설정해야 합니다.
+        // 우리는 매 프레임마다 커맨드 버퍼를 기록할 것이기 때문에 리셋하고 다시 기록할 수 있기를 원합니다. 따라서 명령 풀에 대해 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT 플래그 비트를 설정해야 합니다.
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        // 명령 버퍼는 우리가 마련해둔 그래픽 큐, 프레젠테이션 큐와 같은 하나의 큐에 제출함으로써 실행됩니다. 명령 풀에 사용할 하나의 큐 페밀리 종류만 할당 가능합니다. 그리기 명령을 기록할 것이므로 그래픽 큐 제품군을 선택했습니다.
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
+        // 명령 풀을 생성합니다. 특별한 매개변수가 없습니다.
         if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create command pool!");
+            throw std::runtime_error("Failed to create command pool!");
         }
     }
 
-    void createCommandBuffer()
+
+
+    // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
+    inline void createCommandBuffer()
     {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        // 사용할 명령 풀 정보입니다.
         allocInfo.commandPool = commandPool;
+        // level 매개변수는 할당된 명령 버퍼가 주요 또는 보조 명령 버퍼인지 지정합니다.
+        // VK_COMMAND_BUFFER_LEVEL_PRIMARY : 실행을 위해 직접 큐에 제출할 수 있지만 다른 명령 버퍼에서 호출할 수는 없습니다.
+        // VK_COMMAND_BUFFER_LEVEL_SECONDARY : 직접 제출할 수 없지만 기본 명령 버퍼에서 호출할 수 있습니다.
+        // 여기서는 보조 명령 버퍼 기능을 사용하지 않겠지만 주요 명령 버퍼에서 일반적인 작업을 재사용하는 것이 도움이 된다고 상상할 수 있습니다.
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        // 할당할 커맨드 버퍼 갯수입니다. 지금으로썬 하나의 커멘드 버퍼만 사용합니다.
         allocInfo.commandBufferCount = 1;
 
+        // 커맨드 버퍼를 생성합니다.
         if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to allocate command buffers!");
         }
     }
 
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+
+
+    // 명령 버퍼를 기록하도록 해주는 함수입니다.
+    inline void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
+        // 이제 실행하려는 명령을 명령 버퍼에 기록하는 recordCommandBuffer 함수 작업을 시작합니다. 사용된 VkCommandBuffer는 쓰기를 원하는 현재 스왑체인 이미지의 인덱스를 인자로 받습니다.
+
+        // 버퍼 기록을 하기 위한 속성값들을 설정합니다.
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        // flags 매개변수는 명령 버퍼를 사용하는 방법을 지정합니다. 다음 값을 사용할 수 있습니다.
+        // VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : 명령 버퍼는 한 번 실행한 직후에 다시 기록됩니다.
+        // VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : 이것은 단일 렌더 패스 내에 완전히 포함될 보조 명령 버퍼입니다.
+        // VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : 명령 버퍼가 이미 실행 보류 중인 동안 다시 제출할 수 있습니다.
+        // 이 플래그 중 어느 것도 현재 우리에게 적용되지 않습니다.
+        beginInfo.flags = 0; // Optional
+        // pInheritanceInfo 매개변수는 보조 명령 버퍼에만 관련됩니다. 호출하는 주요 명령 버퍼에서 상속할 상태를 지정합니다.
+        beginInfo.pInheritanceInfo = nullptr; // Optional
 
+        // vkBeginCommandBuffer를 호출하여 명령 버퍼 기록을 시작합니다.
+        // 명령 버퍼가 이미 한 번 기록된 경우 vkBeginCommandBuffer를 호출하면 암시적으로 재설정됩니다. 재설정 된 후에는 이전 버퍼에 명령을 추가할 수 없습니다.
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to begin recording command buffer!");
+            throw std::runtime_error("Failed to begin recording command buffer!");
         }
 
+        // 그리기는 vkCmdBeginRenderPass로 렌더 패스를 시작하는 것으로 그리기는 시작됩니다. 렌더 패스는 VkRenderPassBeginInfo 구조체의 일부 매개변수를 사용하여 구성됩니다.
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        // 첫 번째 매개변수는 렌더 패스 자체와 바인딩할 어태치먼트 입니다. 색상 어태치먼트로 지정된 각각의 스왑 체인 이미지에 대해 프레임 버퍼를 만들었습니다. 따라서 그리려는 스왑체인 이미지에 대한 프레임 버퍼를 바인딩해야 합니다. 전달된 imageIndex 매개변수를 사용하여 현재 스왑체인 이미지에 적합한 프레임 버퍼를 선택할 수 있습니다.
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+        // 다음 두 매개변수는 렌더 영역의 크기를 정의합니다. 렌더 영역은 셰이더 로드 및 저장이 수행되는 위치를 정의합니다. 이 영역 밖의 픽셀에는 정의되지 않은 값이 있습니다. 최상의 성능을 위해 첨부 파일의 크기와 일치해야 합니다.
         renderPassInfo.renderArea.offset = { 0, 0 };
         renderPassInfo.renderArea.extent = swapChainExtent;
-
+        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 첨부에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다.
         VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
         renderPassInfo.clearValueCount = 1;
         renderPassInfo.pClearValues = &clearColor;
 
+        // 이제 렌더 패스를 시작할 수 있습니다. 명령을 기록하는 모든 기능은 vkCmd 접두사로 시작합니다. 모두 void를 반환하므로 기록을 마칠 때까지 오류 처리가 없습니다.
+        // 모든 명령의 첫 번째 매개변수는 항상 명령을 기록할 명령 버퍼입니다. 두 번째 매개변수는 방금 제공한 렌더 패스의 세부 정보를 지정합니다. 최종 매개변수는 렌더 패스 내에서 그리기 명령이 제공되는 방식을 제어합니다. 다음 두 값 중 하나를 가질 수 있습니다.
+        // VK_SUBPASS_CONTENTS_INLINE: 렌더 패스 명령은 기본 명령 버퍼 자체에 포함되며 보조 명령 버퍼는 실행되지 않습니다.
+        // VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : 렌더 패스 명령은 보조 명령 버퍼에서 실행됩니다.
+        // 보조 명령 버퍼를 사용하지 않을 것이므로 첫 번째 옵션을 사용하겠습니다.
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+        // 이제 그래픽 파이프라인을 바인딩할 수 있습니다.
+        // 두 번째 매개변수는 파이프라인 개체가 그래픽 또는 컴퓨팅 파이프라인인지 지정합니다. 이제 Vulkan에 그래픽 파이프라인에서 실행할 작업과 프래그먼트 셰이더에서 사용할 첨부 파일을 지정했으므로 남은 것은 삼각형을 그리도록 지시하는 것뿐입니다.
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        // 실제 vkCmdDraw 함수는 약간 빈약해 보이지만 우리가 이미 설정했던 많은 정보들 때문에 매우 간단하게 구성됩니다. 명령 버퍼를 제외하고 다음 매개변수가 있습니다.
+        // vertexCount: 정점 버퍼가 없더라도 기술적으로 여전히 그릴 정점이 3개 있습니다. (셰이더 코드에)
+        // instanceCount: 인스턴스 렌더링에 사용되며, 그렇게 하지 않는 경우 1을 사용합니다.
+        // firstVertex : 정점 버퍼에 대한 오프셋으로 사용되며 gl_VertexIndex의 가장 낮은 값을 정의합니다.
+        // firstInstance : 인스턴스 렌더링의 오프셋으로 사용되며 gl_InstanceIndex의 가장 낮은 값을 정의합니다.
+        // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
+        // 이제 렌더 패스를 종료할 수 있습니다.
         vkCmdEndRenderPass(commandBuffer);
 
+        // 그리고 이제 명령 버퍼 기록을 마쳤습니다.
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to record command buffer!");
+            throw std::runtime_error("Failed to record command buffer!");
         }
     }
-
 
 
 
@@ -1358,7 +1408,7 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
-        // 
+        // 명령은 프로그램 전체에서 화면에 무언가를 그리는 데 사용되므로 풀은 마지막에만 파괴되어야 합니다.
         vkDestroyCommandPool(device, commandPool, nullptr);
 
         // 이미지 뷰들과 랜더패스를 지우기 전에 먼저 이들을 사용하고 있는 프레임 버퍼를 삭제해야 합니다.
