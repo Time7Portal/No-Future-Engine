@@ -1399,7 +1399,7 @@ private:
         // instanceCount: 인스턴스 렌더링에 사용되며, 그렇게 하지 않는 경우 1을 사용합니다.
         // firstVertex : 정점 버퍼에 대한 오프셋으로 사용되며 gl_VertexIndex의 가장 낮은 값을 정의합니다.
         // firstInstance : 인스턴스 렌더링의 오프셋으로 사용되며 gl_InstanceIndex의 가장 낮은 값을 정의합니다.
-        // vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0); // @@ 바보 여기를 주석 처리 해놓고 삼각형 왜 안그려지지 하고 있었음..
 
         // 이제 렌더 패스를 종료할 수 있습니다.
         vkCmdEndRenderPass(commandBuffer);
@@ -1410,7 +1410,6 @@ private:
             throw std::runtime_error("Failed to record command buffer!");
         }
     }
-
 
 
 
@@ -1427,11 +1426,10 @@ private:
             vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores) != VK_SUCCESS ||
             vkCreateFence(device, &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create synchronization objects for a frame!");
+            throw std::runtime_error("Failed to create synchronization objects for a frame!");
         }
 
     }
-
 
 
 
