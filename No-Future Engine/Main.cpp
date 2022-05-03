@@ -25,7 +25,7 @@
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 // 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수
-// CPU가 GPU보다 너무 앞서는 것을 원하지 않기 때문에 숫자 2를 선택합니다. 2개의 프레임이 비행 중이면 CPU와 GPU가 동시에 자체 작업을 수행할 수 있습니다. CPU가 일찍 끝나면 GPU가 렌더링을 마칠 때까지 기다렸다가 추가 작업을 제출합니다. 3개 이상의 프레임이 비행 중이면 CPU가 GPU보다 앞서서 지연 프레임이 추가될 수 있습니다. 일반적으로 추가 대기 시간은 바람직하지 않습니다. 그러나 비행 중인 프레임 수에 대한 애플리케이션 제어 권한을 부여하는 것은 Vulkan이 명시적임을 보여주는 또 다른 예입니다.
+// CPU가 GPU보다 너무 앞서는 것을 원하지 않기 때문에 숫자 2를 선택합니다. 2개의 프레임이 비행 중이면 CPU와 GPU가 동시에 자체 작업을 수행할 수 있습니다. CPU가 일찍 끝나면 GPU가 렌더링을 마칠 때까지 기다렸다가 추가 작업을 제출합니다. 3개 이상의 프레임이 비행 중이면 CPU가 GPU보다 앞서서 지연 프레임이 추가될 수 있습니다. 일반적으로 추가 대기 시간은 바람직하지 않습니다. 그러나 비행 중인 프레임 수에 대한 애플리케이션 제어 권한을 부여하는 것은 Vulkan이 명시적임을 보여주는 또 다른 예입니다. 그런 다음 여러 명령 버퍼를 만들어야 합니다. createCommandBuffer의 이름을 createCommandBuffers로 바꿉니다. 다음으로 명령 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 크기로 조정하고 VkCommandBufferAllocateInfo를 변경하여 많은 명령 버퍼를 포함한 다음 대상을 명령 버퍼의 벡터로 변경해야 합니다.
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 
@@ -135,7 +135,7 @@ private:
     std::vector<VkSemaphore> imageAvailableSemaphores;              // 이미지가 스왑체인에서 획득되었고 렌더링할 준비가 되었음을 알리는 세마포어
     std::vector<VkSemaphore> renderFinishedSemaphores;              // 렌더링이 완료되어 프레젠테이션이 발생할 수 있음을 알리는 세마포어
     std::vector<VkFence> inFlightFences;                            // 한 번에 하나의 프레임만 렌더링 되도록 확인하는 펜스
-    uint32_t currentFrame = 0;
+    uint32_t currentFrame = 0;                                      // 매 프레임마다 올바른 개체를 사용하려면 현재 프레임을 추적해야 합니다. 이를 위해 프레임 인덱스를 사용합니다.
 
 public:
     void run()
@@ -1553,8 +1553,9 @@ private:
         // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 명령 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
         vkQueuePresentKHR(presentQueue, &presentInfo);
 
-        // 
+        // 매 프레임마다 올바른 개체를 사용하려면 현재 프레임을 추적해야 합니다. 이를 위해 프레임 인덱스를 사용합니다. 모듈로(%) 연산자를 사용하여 프레임 인덱스가 매 MAX_FRAMES_IN_FLIGHT 마다 순환하도록 합니다.
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        // 이제 대기열에 추가된 작업 프레임이 MAX_FRAMES_IN_FLIGHT개 이하이고 이러한 프레임이 서로 겹치지 않도록 필요한 모든 동기화를 구현했습니다. 최종 정리와 같은 코드의 다른 부분은 vkDeviceWaitIdle과 같은 더 거친 동기화에 의존하는 것이 좋습니다. 성능 요구 사항에 따라 사용할 접근 방식을 결정해야 합니다. 예제를 통해 동기화에 대해 자세히 알아보려면 Khronos 에서 제공하는 코드를 살펴보세요. - https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples#swapchain-image-acquire-and-present
     }
 
 
@@ -1656,8 +1657,8 @@ Wrap the swap chain images into VkImageView @
 Create a render pass that specifies the render targets and usage @
 Create framebuffers for the render pass @
 Set up the graphics pipeline @
-Allocateand record a command buffer with the draw commands for every possible swap chain image
-Draw frames by acquiring images, submitting the right draw command bufferand returning the images back to the swap chain
+Allocateand record a command buffer with the draw commands for every possible swap chain image @
+Draw frames by acquiring images, submitting the right draw command bufferand returning the images back to the swap chain @
 
 
 // Coding conventions of Vulkan.h | 불칸 코딩 관습
