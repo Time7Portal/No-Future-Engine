@@ -24,7 +24,8 @@
 // 윈도우 해상도
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
-// 
+// 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수
+// CPU가 GPU보다 너무 앞서는 것을 원하지 않기 때문에 숫자 2를 선택합니다. 2개의 프레임이 비행 중이면 CPU와 GPU가 동시에 자체 작업을 수행할 수 있습니다. CPU가 일찍 끝나면 GPU가 렌더링을 마칠 때까지 기다렸다가 추가 작업을 제출합니다. 3개 이상의 프레임이 비행 중이면 CPU가 GPU보다 앞서서 지연 프레임이 추가될 수 있습니다. 일반적으로 추가 대기 시간은 바람직하지 않습니다. 그러나 비행 중인 프레임 수에 대한 애플리케이션 제어 권한을 부여하는 것은 Vulkan이 명시적임을 보여주는 또 다른 예입니다.
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 
@@ -128,11 +129,13 @@ private:
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
-    VkCommandBuffer commandBuffer;                      // 커맨드 버퍼. 커멘드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 명령 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
+    std::vector<VkCommandBuffer> commandBuffers;        // 커맨드 버퍼. 커멘드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 명령 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
 
-    VkSemaphore imageAvailableSemaphores;               // 이미지가 스왑체인에서 획득되었고 렌더링할 준비가 되었음을 알리는 세마포어
-    VkSemaphore renderFinishedSemaphores;               // 렌더링이 완료되어 프레젠테이션이 발생할 수 있음을 알리는 세마포어
-    VkFence inFlightFence;                              // 한 번에 하나의 프레임만 렌더링 되도록 확인하는 펜스
+    // 동시에 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수만큼 각 프레임에는 자체 명령 버퍼, 세마포어 및 펜스 세트가 있어야 합니다. 이름을 바꾼 다음 객체의 std::vectors로 변경합니다.
+    std::vector<VkSemaphore> imageAvailableSemaphores;              // 이미지가 스왑체인에서 획득되었고 렌더링할 준비가 되었음을 알리는 세마포어
+    std::vector<VkSemaphore> renderFinishedSemaphores;              // 렌더링이 완료되어 프레젠테이션이 발생할 수 있음을 알리는 세마포어
+    std::vector<VkFence> inFlightFences;                            // 한 번에 하나의 프레임만 렌더링 되도록 확인하는 펜스
+    uint32_t currentFrame = 0;
 
 public:
     void run()
@@ -200,7 +203,7 @@ private:
 
         createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀(명령 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createCommandBuffer();      // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
+        createCommandBuffers();      // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
 
         createSyncObjects();        // 2-12. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
 
@@ -786,7 +789,7 @@ private:
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
             {
                 // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ VK_PRESENT_MODE_FIFO_KHR 로 동작하도록 주석처리함
-                //return availablePresentMode;
+                return availablePresentMode;
             }
         }
 
@@ -1323,8 +1326,11 @@ private:
 
 
     // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
-    inline void createCommandBuffer()
+    inline void createCommandBuffers()
     {
+        // 
+        commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         // 사용할 명령 풀 정보입니다.
@@ -1335,10 +1341,10 @@ private:
         // 여기서는 보조 명령 버퍼 기능을 사용하지 않겠지만 주요 명령 버퍼에서 일반적인 작업을 재사용하는 것이 도움이 된다고 상상할 수 있습니다.
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         // 할당할 커맨드 버퍼 갯수입니다. 지금으로썬 하나의 커멘드 버퍼만 사용합니다.
-        allocInfo.commandBufferCount = 1;
+        allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
         // 커맨드 버퍼를 생성합니다.
-        if (vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS)
+        if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to allocate command buffers!");
         }
@@ -1417,6 +1423,12 @@ private:
     // 2-12. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     inline void createSyncObjects()
     {
+        //
+        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+
         // Vulkan의 핵심 설계 철학은 GPU 의 실행 동기화를 명시적으로 처리하지는 것입니다. 드라이버에게 실행하려는 순서를 알려주는 다양한 동기화 프리미티브를 정의하는 것은 우리에게 달려 있습니다. 즉, GPU에서 작업 실행을 시작하는 많은 Vulkan API 호출은 비동기적으로 실행되며 모든 처리가 다 끝나기 전에 함수는 반환됩니다.
         // 이 장에는 명시적으로 GPU 에 요청해야 하는 많은 이벤트가 있습니다.
         // 1) 스왑 체인에서 이미지 획득
@@ -1439,11 +1451,14 @@ private:
 
         // 세마포어(GPU) 와 펜스(CPU) 동기화 개체 만들기
         // 사용할 동기화 프리미티브가 두 개 있고 동기화를 적용할 두 곳이 있습니다. 스왑체인 작업과 이전 프레임이 완료되기를 기다리는 것입니다. GPU에서 발생하기 때문에 스왑체인 작업에 세마포어를 사용하고 싶습니다. 따라서 우리가 도울 수만 있다면 호스트가 기다리게 만들고 싶지 않습니다. 이전 프레임이 끝날 때까지 기다리기 위해 반대 이유로 울타리를 사용하려고 합니다. 호스트가 기다려야 하기 때문입니다. 이것은 한 번에 하나 이상의 프레임을 그리지 않도록 하기 위한 것입니다. 매 프레임마다 명령 버퍼를 다시 기록하기 때문에 현재 프레임의 실행이 완료될 때까지 다음 프레임의 작업을 명령 버퍼에 기록할 수 없습니다. GPU 가 연산하는 동안 명령 버퍼에 새로운 내용을 덮어쓰고 싶지 않기 때문입니다.
-        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores) != VK_SUCCESS ||
-            vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores) != VK_SUCCESS ||
-            vkCreateFence(device, &fenceInfo, nullptr, &inFlightFence) != VK_SUCCESS)
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            throw std::runtime_error("Failed to create synchronization objects for a frame!");
+            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create synchronization objects for a frame!");
+            }
         }
 
     }
@@ -1479,27 +1494,27 @@ private:
         // 이전 그리기 연산 끝나기를 대기
         // 이전 프레임 그리기가 끝나서 커맨드 버퍼와 세마포어가 사용 가능해질때까지 때까지 기다릴 수 있습니다. 이를 위해 vkwaitForFences를 호출합니다.
         // vkwaitForFences 함수는 펜스들의 배열을 가지고 이들 중 일부 또는 모든 펜스가 신호를 받을 때까지 호스트에서 기다립니다. 여기서 전달하는 VK_TRUE는 모든 펜스들이 신호를 받을때까지 기다림을 의미합니다. 이 함수에는 64비트 무부호 정수 UINT64_MAX의 최대값으로 설정한 시간 초과 매개변수도 있습니다. 이 시간을 초과하면 그냥 대기를 끝냅니다.
-        vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
         // 대기 후 vkResetFences를 사용하여 수동으로 펜스를 unsignaled 상태로 재설정해야 합니다.
-        vkResetFences(device, 1, &inFlightFence);
+        vkResetFences(device, 1, &inFlightFences[currentFrame]);
         // 계속 진행하기 전에 디자인에 약간의 문제가 있습니다. 첫 번째 프레임에서 우리는 inFlightFence가 신호를 받을 때까지 즉시 대기하는 drawFrame()을 호출합니다. inFlightFence는 프레임 렌더링이 완료된 후에만 신호를 보내지만 이것이 첫 번째 프레임이기 때문에 펜스에 신호를 보낼 이전 프레임이 없습니다! 따라서 vkWaitForFences()는 절대 일어나지 않을 일을 기다리며 무기한 차단합니다. 이 딜레마에 대한 많은 솔루션 중에서 API에 내장된 영리한 해결 방법이 있습니다. vkwaitForFences()에 대한 첫 번째 호출이 펜스가 이미 신호를 받았던 것처럼 즉시 반환되도록 신호된 상태에서 펜스를 생성합니다. 이를 위해 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다. 이를 위해 위에 만들었던 createSyncObjects() 함수 내 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다.
 
         // 스왑 체인에서 이미지 가져오기
         // drawFrame 함수에서 다음으로 해야 할 일은 스왑 체인에서 이미지를 가져오는 것입니다. 스왑 체인은 확장 기능이므로 vk*KHR 명명 규칙이 있는 함수를 사용해야 합니다. vkAcquireNextImageKHR의 처음 두 매개변수는 이미지를 획득하려는 논리적 장치와 스왑 체인입니다. 세 번째 매개변수는 이미지를 사용할 수 있는 시간 제한(나노초)을 지정합니다. 64비트 부호 없는 정수의 최대값을 사용하면 시간 초과를 효과적으로 비활성화할 수 있습니다. 다음 두 매개변수는 프레젠테이션 엔진이 이미지를 사용하여 완료할 때 신호를 보낼 동기화 개체를 지정합니다. 그것이 우리가 그림을 그리기 시작할 수 있는 시점입니다. 세마포어, 펜스 또는 둘 다를 지정할 수 있습니다. 여기서는 이를 위해 imageAvailableSemaphore를 사용할 것입니다. 마지막 매개변수는 사용 가능한 스왑 체인 이미지의 인덱스를 출력할 변수를 지정합니다. 인덱스는 swapChainImages 배열의 VkImage를 참조합니다. 해당 인덱스를 사용하여 VkFrameBuffer를 선택합니다.
         uint32_t imageIndex;
-        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores, VK_NULL_HANDLE, &imageIndex);
+        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
         // 커맨드 버퍼에 기록하기
         // 사용할 스왑 체인 이미지를 지정하는 imageIndex를 사용하여 이제 명령 버퍼를 기록할 수 있습니다. 먼저 명령 버퍼에서 vkResetCommandBuffer를 호출하여 기록할 수 있는지 확인합니다. vkResetCommandBuffer의 두 번째 매개변수는 VkCommandBufferResetFlagBits 플래그입니다. 특별한 것을 하고 싶지 않기 때문에 0으로 둡니다.
-        vkResetCommandBuffer(commandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
+        vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
         // 이제 우리가 원하는 명령을 기록하기 위해 함수 recordCommandBuffer를 호출합니다. 완전히 기록된 명령 버퍼를 사용하여 이제 제출할 수 있습니다.
-        recordCommandBuffer(commandBuffer, imageIndex);
+        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
         // 커맨드 버퍼를 그래픽카드에 제출하기
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         // 처음 세 개의 매개변수는 실행이 시작되기 전에 대기할 세마포어와 파이프라인의 어느 단계에서 대기할 것인지 지정합니다. 사용할 수 있을 때까지 이미지에 색상을 기록하기를 원하므로 색상 첨부 파일에 기록하는 그래픽 파이프라인의 단계를 지정하고 있습니다. 즉, 이론적으로 구현은 이미 이미지를 사용할 수 없는 동안 정점 셰이더 등의 실행을 시작할 수 있습니다. waitStages 배열의 각 항목은 pWaitSemaphores 에 동일한 인덱스로 있는 세마포어에 해당합니다.
-        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores };
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = waitSemaphores;
@@ -1507,15 +1522,15 @@ private:
 
         // 다음 두 매개변수는 실제로 실행을 위해 제출할 명령 버퍼를 지정합니다. 가지고 있는 단일 명령 버퍼를 제출하기만 하면 됩니다.
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer;
+        submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
         // signalSemaphoreCount 및 pSignalSemaphores 매개변수는 명령 버퍼가 실행을 완료한 후 신호를 보낼 세마포어를 지정합니다. 우리의 경우에는 그 목적을 위해 renderFinishedSemaphore를 사용하고 있습니다.
-        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores };
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
         // 이제 vkQueueSubmit을 사용하여 그래픽 대기열에 명령 버퍼를 제출할 수 있습니다. 이 함수는 워크로드가 훨씬 더 클 때 효율성을 위해 인수로 VkSubmitInfo 구조의 배열을 사용합니다. 마지막 매개변수는 명령 버퍼가 실행을 완료할 때 신호를 보낼 선택적 펜스를 참조합니다. 이를 통해 언제 명령 버퍼를 재사용해도 안전한지 알 수 있으므로 inFlightFence에 제공하고자 합니다. 이제 다음 프레임에서 CPU는 새 명령을 기록하기 전에 이 명령 버퍼의 실행이 완료될 때까지 기다립니다.
-        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS)
+        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to submit draw command buffer!");
         }
@@ -1537,6 +1552,9 @@ private:
 
         // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 명령 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
         vkQueuePresentKHR(presentQueue, &presentInfo);
+
+        // 
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
 
@@ -1544,9 +1562,11 @@ private:
     inline void cleanup()
     {
         // 세마포어와 펜스는 모든 명령이 완료되고 더 이상 동기화가 필요하지 않을 때 프로그램 끝에서 정리해야 합니다.
-        vkDestroySemaphore(device, renderFinishedSemaphores, nullptr);
-        vkDestroySemaphore(device, imageAvailableSemaphores, nullptr);
-        vkDestroyFence(device, inFlightFence, nullptr);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+            vkDestroyFence(device, inFlightFences[i], nullptr);
+        }
 
         // 명령은 프로그램 전체에서 화면에 무언가를 그리는 데 사용되므로 풀은 마지막에만 파괴되어야 합니다.
         vkDestroyCommandPool(device, commandPool, nullptr);
