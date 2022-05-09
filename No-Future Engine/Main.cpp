@@ -137,6 +137,8 @@ private:
     std::vector<VkFence> inFlightFences;                            // 한 번에 하나의 프레임만 렌더링 되도록 확인하는 펜스
     uint32_t currentFrame = 0;                                      // 매 프레임마다 올바른 개체를 사용하려면 현재 프레임을 추적해야 합니다. 이를 위해 프레임 인덱스를 사용합니다.
 
+    bool framebufferResized = false;                                // 
+
 public:
     void run()
     {
@@ -160,7 +162,12 @@ private:
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // GLFW 는 OpenGL context 에 기본적으로 최적화 되어 있으므로 Vulkan 용으로 사용하기 위해 GLFW_NO_API 로 명시하였습니다.
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // 사용자가 윈도우 창 크기를 마음껏 조절하도록 만들려면 불칸에서 신경써야할 일이 엄청 많아지므로 고정 해상도를 사용하도록 제한하였습니다.
 
+        // GLFW 윈도우를 생성합니다.
         window = glfwCreateWindow(WIDTH, HEIGHT, "No-Future Engine [Vulkan]", nullptr, nullptr);
+        // 
+        glfwSetWindowUserPointer(window, this);
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
 
         // 인스턴스를 생성하기 전에 그래픽카드가 지원하는 불칸 확장 기능들을 확인합니다. | Gets how many Vulkan extensions graphics card can provides.
         // 몇개의 확장 기능을 지원하는지 갯수를 우선 받은 후에
@@ -176,6 +183,13 @@ private:
         {
             std::cout << '\t' << extension.extensionName << '\n';
         }
+    }
+
+    // 
+    HELPER_FUNCTION static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
+    {
+        auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        app->framebufferResized = true;
     }
 
 
@@ -708,7 +722,8 @@ private:
         createInfo.clipped = VK_TRUE;
 
         // Vulkan을 사용하면 애플리케이션이 실행되는 동안 스왑 체인이 유효하지 않거나 최적화되지 않을 수 있습니다. 예를 들어 창 크기가 조정된 경우 스왑 체인은 실제로 처음부터 다시 만들어야 하며 이전 체인에 대한 참조를 이 필드에 지정해야 합니다.
-        createInfo.oldSwapchain = VK_NULL_HANDLE;
+        // 
+        //createInfo.oldSwapchain = VK_NULL_HANDLE;
 
 
         // 2-5-5. 이제 스왑 체인을 만들고 핸들을 얻습니다!
@@ -1495,15 +1510,27 @@ private:
         // 이전 프레임 그리기가 끝나서 커맨드 버퍼와 세마포어가 사용 가능해질때까지 때까지 기다릴 수 있습니다. 이를 위해 vkwaitForFences를 호출합니다.
         // vkwaitForFences 함수는 펜스들의 배열을 가지고 이들 중 일부 또는 모든 펜스가 신호를 받을 때까지 호스트에서 기다립니다. 여기서 전달하는 VK_TRUE는 모든 펜스들이 신호를 받을때까지 기다림을 의미합니다. 이 함수에는 64비트 무부호 정수 UINT64_MAX의 최대값으로 설정한 시간 초과 매개변수도 있습니다. 이 시간을 초과하면 그냥 대기를 끝냅니다.
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-        // 대기 후 vkResetFences를 사용하여 수동으로 펜스를 unsignaled 상태로 재설정해야 합니다.
-        vkResetFences(device, 1, &inFlightFences[currentFrame]);
-        // 계속 진행하기 전에 디자인에 약간의 문제가 있습니다. 첫 번째 프레임에서 우리는 inFlightFence가 신호를 받을 때까지 즉시 대기하는 drawFrame()을 호출합니다. inFlightFence는 프레임 렌더링이 완료된 후에만 신호를 보내지만 이것이 첫 번째 프레임이기 때문에 펜스에 신호를 보낼 이전 프레임이 없습니다! 따라서 vkWaitForFences()는 절대 일어나지 않을 일을 기다리며 무기한 차단합니다. 이 딜레마에 대한 많은 솔루션 중에서 API에 내장된 영리한 해결 방법이 있습니다. vkwaitForFences()에 대한 첫 번째 호출이 펜스가 이미 신호를 받았던 것처럼 즉시 반환되도록 신호된 상태에서 펜스를 생성합니다. 이를 위해 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다. 이를 위해 위에 만들었던 createSyncObjects() 함수 내 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다.
 
         // 스왑 체인에서 이미지 가져오기
         // drawFrame 함수에서 다음으로 해야 할 일은 스왑 체인에서 이미지를 가져오는 것입니다. 스왑 체인은 확장 기능이므로 vk*KHR 명명 규칙이 있는 함수를 사용해야 합니다. vkAcquireNextImageKHR의 처음 두 매개변수는 이미지를 획득하려는 논리적 장치와 스왑 체인입니다. 세 번째 매개변수는 이미지를 사용할 수 있는 시간 제한(나노초)을 지정합니다. 64비트 부호 없는 정수의 최대값을 사용하면 시간 초과를 효과적으로 비활성화할 수 있습니다. 다음 두 매개변수는 프레젠테이션 엔진이 이미지를 사용하여 완료할 때 신호를 보낼 동기화 개체를 지정합니다. 그것이 우리가 그림을 그리기 시작할 수 있는 시점입니다. 세마포어, 펜스 또는 둘 다를 지정할 수 있습니다. 여기서는 이를 위해 imageAvailableSemaphore를 사용할 것입니다. 마지막 매개변수는 사용 가능한 스왑 체인 이미지의 인덱스를 출력할 변수를 지정합니다. 인덱스는 swapChainImages 배열의 VkImage를 참조합니다. 해당 인덱스를 사용하여 VkFrameBuffer를 선택합니다.
         uint32_t imageIndex;
-        vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
+        // 
+        if (result == VK_ERROR_OUT_OF_DATE_KHR)
+        {
+            recreateSwapChain();
+            return;
+        }
+        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        {
+            throw std::runtime_error("Failed to acquire swap chain image!");
+        }
+
+        // 대기 후 vkResetFences를 사용하여 수동으로 펜스를 unsignaled 상태로 재설정해야 합니다.
+        vkResetFences(device, 1, &inFlightFences[currentFrame]);
+        // 계속 진행하기 전에 디자인에 약간의 문제가 있습니다. 첫 번째 프레임에서 우리는 inFlightFence가 신호를 받을 때까지 즉시 대기하는 drawFrame()을 호출합니다. inFlightFence는 프레임 렌더링이 완료된 후에만 신호를 보내지만 이것이 첫 번째 프레임이기 때문에 펜스에 신호를 보낼 이전 프레임이 없습니다! 따라서 vkWaitForFences()는 절대 일어나지 않을 일을 기다리며 무기한 차단합니다. 이 딜레마에 대한 많은 솔루션 중에서 API에 내장된 영리한 해결 방법이 있습니다. vkwaitForFences()에 대한 첫 번째 호출이 펜스가 이미 신호를 받았던 것처럼 즉시 반환되도록 신호된 상태에서 펜스를 생성합니다. 이를 위해 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다. 이를 위해 위에 만들었던 createSyncObjects() 함수 내 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다.
+        
         // 커맨드 버퍼에 기록하기
         // 사용할 스왑 체인 이미지를 지정하는 imageIndex를 사용하여 이제 명령 버퍼를 기록할 수 있습니다. 먼저 명령 버퍼에서 vkResetCommandBuffer를 호출하여 기록할 수 있는지 확인합니다. vkResetCommandBuffer의 두 번째 매개변수는 VkCommandBufferResetFlagBits 플래그입니다. 특별한 것을 하고 싶지 않기 때문에 0으로 둡니다.
         vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
@@ -1551,7 +1578,18 @@ private:
         presentInfo.pResults = nullptr; // Optional
 
         // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 명령 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
-        vkQueuePresentKHR(presentQueue, &presentInfo);
+        result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+        // 
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
+        {
+            framebufferResized = false;
+            recreateSwapChain();
+        }
+        else if (result != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to present swap chain image!");
+        }
 
         // 매 프레임마다 올바른 개체를 사용하려면 현재 프레임을 추적해야 합니다. 이를 위해 프레임 인덱스를 사용합니다. 모듈로(%) 연산자를 사용하여 프레임 인덱스가 매 MAX_FRAMES_IN_FLIGHT 마다 순환하도록 합니다.
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1559,11 +1597,39 @@ private:
     }
 
 
+    // 
+    HELPER_FUNCTION void recreateSwapChain()
+    {
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        while (width == 0 || height == 0)
+        {
+            glfwGetFramebufferSize(window, &width, &height);
+            glfwWaitEvents();
+        }
+
+        vkDeviceWaitIdle(device);
+
+        cleanupSwapChain();
+
+        createSwapChain();
+        createImageViews();
+        createRenderPass();
+        createGraphicsPipeline();
+        createFramebuffers();
+    }
+
+
+
     // 4. 프로그램 종료
     inline void cleanup()
     {
+        // 
+        cleanupSwapChain();
+
         // 세마포어와 펜스는 모든 명령이 완료되고 더 이상 동기화가 필요하지 않을 때 프로그램 끝에서 정리해야 합니다.
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
             vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(device, inFlightFences[i], nullptr);
@@ -1621,6 +1687,29 @@ private:
         // std::unique_ptr 나 std::shared_ptr 등을 써서 우아하게 RAII 를 처리할 수도 있지만 학습을 위해 모든 자원을 명시적으로 소멸합니다.
         // Possible to handle RAII more elegantly with std::unique_ptr or std::shared_ptr etc, but explicitly destroy all resources for learning now.
     }
+
+
+
+    // 
+    HELPER_FUNCTION void cleanupSwapChain()
+    {
+        for (auto framebuffer : swapChainFramebuffers)
+        {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        vkDestroyPipeline(device, graphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyRenderPass(device, renderPass, nullptr);
+
+        for (auto imageView : swapChainImageViews)
+        {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
+    }
+
 };
 
 
