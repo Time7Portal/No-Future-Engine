@@ -1504,6 +1504,7 @@ private:
         vkDeviceWaitIdle(device);
     }
 
+    // 하나의 프레임을 그립니다.
     HELPER_FUNCTION void drawFrame()
     {
         // 이전 그리기 연산 끝나기를 대기
@@ -1516,9 +1517,13 @@ private:
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-        // 
+        // 이제 스왑 체인 재생이 필요한 시점을 파악하고 새로운 recreateSwapChain 함수를 호출하기만 하면 됩니다. 운 좋게도 Vulkan은 일반적으로 프레젠테이션 중에 스왑 체인이 더 이상 적절하지 않다고 알려줍니다.
+        // vkAcquireNextImageKHR 및 vkQueuePresentKHR 함수는 이를 나타내기 위해 다음과 같은 특수 값을 반환할 수 있습니다.
+        // VK_ERROR_OUT_OF_DATE_KHR: 스왑 체인이 표면과 호환되지 않아 더 이상 렌더링에 사용할 수 없습니다. 일반적으로 창 크기 조정 후에 발생합니다.
+        // VK_SUBOPTIMAL_KHR: 스왑 체인을 사용하여 표면에 성공적으로 표시할 수 있지만 표면 속성이 더 이상 정확히 일치하지 않습니다.
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
+            // 이미지 획득을 시도할 때 스왑 체인이 오래된 것으로 판명되면 더 이상 이미지에 표시할 수 없습니다. 따라서 스왑 체인을 즉시 다시 만들고 다음 drawFrame 호출에서 다시 시도해야 합니다. 스왑 체인이 차선책인 경우에도 그렇게 하도록 결정할 수 있지만 일단은 이미지를 얻었기 때문에 이 경우에도 계속 진행하기로 결정했습니다. VK_SUCCESS 및 VK_SUBOPTIMAL_KHR 모두 "성공" 반환 코드로 간주됩니다.
             recreateSwapChain();
             return;
         }
@@ -1580,12 +1585,12 @@ private:
         // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 명령 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-        // 
+        // vkQueuePresentKHR 함수는 같은 의미로 같은 값을 반환합니다. 이 경우 최상의 결과를 원하기 때문에 최적이 아닌 경우 스왑 체인도 다시 생성합니다.
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
         {
             framebufferResized = false;
             recreateSwapChain();
-        }
+        }@@@@@@@@@@@@@@@@@@@@@
         else if (result != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to present swap chain image!");
@@ -1597,9 +1602,10 @@ private:
     }
 
 
-    // 
+    // 스왑 체인을 다시 설정합니다.
     HELPER_FUNCTION void recreateSwapChain()
     {
+        // 창 크기 등이 변경되면 스왑 체인은 더 이상 호환되지 않기 때문에 이러한 이벤트 들을 포착하고 스왑 체인을 다시 만들어야 합니다.
         int width = 0, height = 0;
         glfwGetFramebufferSize(window, &width, &height);
         while (width == 0 || height == 0)
@@ -1608,10 +1614,14 @@ private:
             glfwWaitEvents();
         }
 
+        // 아직 사용 중일 수 있는 리소스를 건드리면 안 되기 때문에 여기서 추상적 디바이스의 사용이 완료될 때까지 대기합니다.
         vkDeviceWaitIdle(device);
 
+        // 우리가 해야 할 첫 번째 일은 스왑 체인 자체를 다시 만드는 것입니다. 스왑 체인 이미지를 기반으로 하고 있는 이미지 뷰를 다시 만들어야 하고, 스왑 체인 이미지의 형식에 의존하고 있는 렌더 패스도 다시 만들어야 합니다. 스왑 체인 이미지 형식이 창 크기 조정과 같은 작업 중에 변경되는 경우는 드물지만 그래도 처리해야 합니다. 뷰포트 및 가위 직사각형 크기 설정은 그래픽 파이프라인 생성 중에 지정되므로 파이프라인도 다시 빌드해야 합니다. 뷰포트 및 가위 직사각형에 동적 상태를 사용하여 파이프라인 재빌드를 피할 수도 있습니다. 마지막으로 프레임 버퍼는 스왑 체인 이미지에 직접적으로 의존하기 떄문에 프레임 버퍼도 새로 만들어야 합니다.
+        // 스왑 체인을 다시 만들기 위해 이전 버전을 정리합니다.
         cleanupSwapChain();
 
+        // 아래가 스왑 체인을 다시 만드는 데 필요한 모든 것입니다! 그러나 이 접근 방식의 단점은 새 스왑 체인을 만들기 전에 모든 렌더링이 중지된다는 것입니다. 이전 스왑 체인에서 이미지에 명령을 그리는 동안 새 스왑 체인을 만들 수 있습니다. VkSwapchainCreateInfoKHR 구조체의 oldSwapChain 필드에 이전 스왑 체인을 전달하고 사용을 마치는 즉시 이전 스왑 체인을 파괴함으로써 새로운 스왑 체인과 자연스럽게 연결시킬 수도 있습니다.
         createSwapChain();
         createImageViews();
         createRenderPass();
@@ -1688,11 +1698,10 @@ private:
         // Possible to handle RAII more elegantly with std::unique_ptr or std::shared_ptr etc, but explicitly destroy all resources for learning now.
     }
 
-
-
-    // 
+    // 스왑 체인을 다시 만들기 전에 이전 버전을 정리합니다.
     HELPER_FUNCTION void cleanupSwapChain()
     {
+        // 스왑 체인에 쓰인 모든 개체들을 지웁니다.
         for (auto framebuffer : swapChainFramebuffers)
         {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
