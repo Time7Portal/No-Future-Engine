@@ -137,7 +137,7 @@ private:
     std::vector<VkFence> inFlightFences;                            // 한 번에 하나의 프레임만 렌더링 되도록 확인하는 펜스
     uint32_t currentFrame = 0;                                      // 매 프레임마다 올바른 개체를 사용하려면 현재 프레임을 추적해야 합니다. 이를 위해 프레임 인덱스를 사용합니다.
 
-    bool framebufferResized = false;                                // 
+    bool framebufferResized = false;                                // 많은 드라이버와 플랫폼이 창 크기 조정 후 VK_ERROR_OUT_OF_DATE_KHR을 자동으로 트리거하지만 항상 발생한다고 보장할 수 없습니다. 때문에 프레임 버퍼 크기 조정을 직접 감지하도록 framebufferResized 를 만들어 사용하였습니다.
 
 public:
     void run()
@@ -160,12 +160,13 @@ private:
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // GLFW 는 OpenGL context 에 기본적으로 최적화 되어 있으므로 Vulkan 용으로 사용하기 위해 GLFW_NO_API 로 명시하였습니다.
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // 사용자가 윈도우 창 크기를 마음껏 조절하도록 만들려면 불칸에서 신경써야할 일이 엄청 많아지므로 고정 해상도를 사용하도록 제한하였습니다.
+        //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // 사용자가 윈도우 창 크기를 마음껏 조절하도록 만들려면 불칸에서 신경써야할 일이 엄청 많아지므로 우선 고정 해상도를 사용하도록 제한하였습니다.
 
         // GLFW 윈도우를 생성합니다.
         window = glfwCreateWindow(WIDTH, HEIGHT, "No-Future Engine [Vulkan]", nullptr, nullptr);
         // 
         glfwSetWindowUserPointer(window, this);
+        // 사용자가 GLFW 윈도우의 크기를 조정했는지 감지하여 등록한 콜백 함수를 실행합니다.
         glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
 
@@ -185,7 +186,7 @@ private:
         }
     }
 
-    // 
+    // 콜백으로 정적 함수를 만드는 이유는 GLFW가 HelloTriangleApplication 인스턴스에 대한 올바른 this 포인터로 멤버 함수를 올바르게 호출하는 방법을 모르기 때문입니다. 그러나 우리는 콜백에서 GLFWwindow에 대한 참조를 얻었고 그 안에 임의의 포인터를 저장할 수 있는 glfwSetWindowUserPointer 라는 또 다른 GLFW 함수가 있습니다.
     HELPER_FUNCTION static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
     {
         auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
@@ -1517,7 +1518,7 @@ private:
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
-        // 이제 스왑 체인 재생이 필요한 시점을 파악하고 새로운 recreateSwapChain 함수를 호출하기만 하면 됩니다. 운 좋게도 Vulkan은 일반적으로 프레젠테이션 중에 스왑 체인이 더 이상 적절하지 않다고 알려줍니다.
+        // 이제 스왑 체인 재생이 필요한 시점을 파악하고 새로운 recreateSwapChain 함수를 호출하기만 하면 됩니다. 운 좋게도 Vulkan은 일반적으로 프레젠테이션 중에 스왑 체인이 더 이상 적절하지 않은 경우(화면 크기 조정 등)를 알려줍니다.
         // vkAcquireNextImageKHR 및 vkQueuePresentKHR 함수는 이를 나타내기 위해 다음과 같은 특수 값을 반환할 수 있습니다.
         // VK_ERROR_OUT_OF_DATE_KHR: 스왑 체인이 표면과 호환되지 않아 더 이상 렌더링에 사용할 수 없습니다. 일반적으로 창 크기 조정 후에 발생합니다.
         // VK_SUBOPTIMAL_KHR: 스왑 체인을 사용하여 표면에 성공적으로 표시할 수 있지만 표면 속성이 더 이상 정확히 일치하지 않습니다.
@@ -1525,6 +1526,7 @@ private:
         {
             // 이미지 획득을 시도할 때 스왑 체인이 오래된 것으로 판명되면 더 이상 이미지에 표시할 수 없습니다. 따라서 스왑 체인을 즉시 다시 만들고 다음 drawFrame 호출에서 다시 시도해야 합니다. 스왑 체인이 차선책인 경우에도 그렇게 하도록 결정할 수 있지만 일단은 이미지를 얻었기 때문에 이 경우에도 계속 진행하기로 결정했습니다. VK_SUCCESS 및 VK_SUBOPTIMAL_KHR 모두 "성공" 반환 코드로 간주됩니다.
             recreateSwapChain();
+            // 스왑 체인을 재생성하고 바로 drawFrame()을 나가서 재실행 하도록 만들었습니다. 문제는 이후에 명령을 제출하는 작업이 생략되며 그에 따라 펜스에 신호가 가지 않아 위에서 사용한 vkwaitForFences 함수에서 교착 상태가 발생해 영원히 대기하는 문제가 있습니다. 고맙게도 vkResetFences 를 아래로 내려 간단히 수정할 수 있습니다. 작업을 제출할 것임을 확실히 알 수 있을 때까지 펜스 재설정(vkResetFences) 을 연기하십시오. vkResetFences 호출 전에 return 하면 펜스는 여전히 신호 활성화 상태이기 때문에 다음에 동일한 펜스 개체를 사용할 때 vkwaitForFences 가 교착 상태에 빠지지 않습니다.
             return;
         }
         else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -1585,12 +1587,13 @@ private:
         // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 명령 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-        // vkQueuePresentKHR 함수는 같은 의미로 같은 값을 반환합니다. 이 경우 최상의 결과를 원하기 때문에 최적이 아닌 경우 스왑 체인도 다시 생성합니다.
+        // 많은 드라이버와 플랫폼이 창 크기 조정 후 VK_ERROR_OUT_OF_DATE_KHR을 자동으로 트리거하지만 항상 발생한다고 보장할 수 없습니다. 때문에 프레임 버퍼 크기 조정을 직접 감지하도록 framebufferResized 를 만들어 사용하였습니다.
+        // vkQueuePresentKHR 후에 이 작업을 수행하여 세마포어가 일관된 상태에 있는지 확인하는 것이 중요합니다. 그렇지 않으면 신호된 세마포어가 제대로 대기되지 않을 수 있습니다. 이제 실제로 크기 조정을 감지하기 위해 GLFW 프레임워크에서 glfwSetFramebufferSizeCallback 함수를 사용하여 콜백을 설정할 수 있습니다.
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized)
         {
             framebufferResized = false;
             recreateSwapChain();
-        }@@@@@@@@@@@@@@@@@@@@@
+        }
         else if (result != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to present swap chain image!");
@@ -1608,8 +1611,10 @@ private:
         // 창 크기 등이 변경되면 스왑 체인은 더 이상 호환되지 않기 때문에 이러한 이벤트 들을 포착하고 스왑 체인을 다시 만들어야 합니다.
         int width = 0, height = 0;
         glfwGetFramebufferSize(window, &width, &height);
+        // 이전에 구성한 스왑 체인이 무효가 되는 또 다른 경우가 있는데 이는 특별한 종류의 창 크기 조정인 창 최소화입니다. 이 경우는 프레임 버퍼 크기가 0 이 되기 때문에 특별합니다. 여기서는 창이 다시 활성화 될 때까지 일시 중지 (무한 루프) 하여 이를 처리합니다.
         while (width == 0 || height == 0)
         {
+            // glfwGetFramebufferSize 를 지속적으로 호출하여 창이 다시 활성화 됨을 검사하는데 (사이즈가 0 이 아닐 경우), glfwWaitEvents 로 계속 대기 상태로 있다가 사용자의 입력이 있을 경우만 효율적으로 검사합니다.
             glfwGetFramebufferSize(window, &width, &height);
             glfwWaitEvents();
         }
@@ -1634,7 +1639,7 @@ private:
     // 4. 프로그램 종료
     inline void cleanup()
     {
-        // 
+        // 스왑 체인을 다시 만들기 위해 이전 버전을 정리합니다.
         cleanupSwapChain();
 
         // 세마포어와 펜스는 모든 명령이 완료되고 더 이상 동기화가 필요하지 않을 때 프로그램 끝에서 정리해야 합니다.
@@ -1647,30 +1652,6 @@ private:
 
         // 명령은 프로그램 전체에서 화면에 무언가를 그리는 데 사용되므로 풀은 마지막에만 파괴되어야 합니다.
         vkDestroyCommandPool(device, commandPool, nullptr);
-
-        // 이미지 뷰들과 랜더패스를 지우기 전에 먼저 이들을 사용하고 있는 프레임 버퍼를 삭제해야 합니다.
-        for (auto framebuffer : swapChainFramebuffers)
-        {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
-        }
-
-        // 그래픽 파이프라인은 일반적인 그리기 작업에 항상 필요하므로 프로그램 종료 시에만 제거해야 합니다.
-        vkDestroyPipeline(device, graphicsPipeline, nullptr);
-
-        // 파이프라인 레이아웃은 프로그램 수명 내내 참조되므로 마지막에 삭제해야 합니다.
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-
-        // 파이프라인 레이아웃과 마찬가지로 렌더 패스는 프로그램 전체에서 참조되므로 마지막에만 정리해야 합니다.
-        vkDestroyRenderPass(device, renderPass, nullptr);
-
-        // 이미지와 달리 이미지 뷰는 명시적으로 생성되었으므로 프로그램 종료 시 전부 지워야 합니다.
-        for (auto imageView : swapChainImageViews)
-        {
-            vkDestroyImageView(device, imageView, nullptr);
-        }
-
-        // 스왑 체인 개체를 지웁니다.
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
 
         // 추상적 디바이스 개체를 지웁니다.
         vkDestroyDevice(device, nullptr);
@@ -1698,24 +1679,31 @@ private:
         // Possible to handle RAII more elegantly with std::unique_ptr or std::shared_ptr etc, but explicitly destroy all resources for learning now.
     }
 
-    // 스왑 체인을 다시 만들기 전에 이전 버전을 정리합니다.
+    // 스왑 체인을 다시 만들기 전에 이전 버전을 정리합니다. 또는 프로그램 종료를 위해 스왑 체인에 쓰인 모든 개체들을 지웁니다.
     HELPER_FUNCTION void cleanupSwapChain()
     {
-        // 스왑 체인에 쓰인 모든 개체들을 지웁니다.
+        // 이미지 뷰들과 랜더패스를 지우기 전에 먼저 이들을 사용하고 있는 프레임 버퍼를 삭제해야 합니다.
         for (auto framebuffer : swapChainFramebuffers)
         {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
 
+        // 그래픽 파이프라인은 일반적인 그리기 작업에 항상 필요하므로 프로그램 종료 시에만 제거해야 합니다.
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
+
+        // 파이프라인 레이아웃은 프로그램 수명 내내 참조되므로 마지막에 삭제해야 합니다.
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+
+        // 파이프라인 레이아웃과 마찬가지로 렌더 패스는 프로그램 전체에서 참조되므로 마지막에만 정리해야 합니다.
         vkDestroyRenderPass(device, renderPass, nullptr);
 
+        // 이미지와 달리 이미지 뷰는 명시적으로 생성되었으므로 프로그램 종료 시 전부 지워야 합니다.
         for (auto imageView : swapChainImageViews)
         {
             vkDestroyImageView(device, imageView, nullptr);
         }
 
+        // 스왑 체인 개체를 지웁니다.
         vkDestroySwapchainKHR(device, swapChain, nullptr);
     }
 
