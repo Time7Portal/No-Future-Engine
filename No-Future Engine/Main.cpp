@@ -804,7 +804,7 @@ private:
             // 트리플 버퍼링 수직 동기화 모드가 가능하면 활성화
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
             {
-                // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ VK_PRESENT_MODE_FIFO_KHR 로 동작하도록 주석처리함
+                // @@@@ VK_PRESENT_MODE_FIFO_KHR 로 동작하도록 주석처리함
                 return availablePresentMode;
             }
         }
