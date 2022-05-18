@@ -4,25 +4,27 @@
 // 버텍스 셰이더는 각각의 버텍스마다 수행된다
 
 
-// 테스트용 삼각형의 3점의 위치를 저장하기 위해 하드코딩
-vec2 positions[3] = vec2[] (
-	vec2(0.0, -0.5),
-	vec2(0.5, 0.5),
-	vec2(-0.5, 0.5)
-);
+// 테스트용 삼각형의 3점의 위치를 보여주기 위해 하드코딩
+//vec2 positions[3] = vec2[] (
+//	vec2(0.0, -0.5),
+//	vec2(0.5, 0.5),
+//	vec2(-0.5, 0.5)
+//);
 // 테스트용 삼각형의 3점의 칼라값 또한 하드코딩
-vec3 colors[3] = vec3[] (
-    vec3(1.0, 0.0, 0.0),
-    vec3(0.0, 1.0, 0.0),
-    vec3(0.0, 0.0, 1.0)
-);
+//vec3 colors[3] = vec3[] (
+//    vec3(1.0, 0.0, 0.0),
+//    vec3(0.0, 1.0, 0.0),
+//    vec3(0.0, 0.0, 1.0)
+//);
 
 
-// 버텍스 버퍼로부터 x, y 위치값 전달 받아서
-//layout(location = 0) in vec2 position;
+// 버텍스 버퍼로부터 x, y 위치값과 버텍스 컬러를 전달 받습니다.
+// vec3 가 아닌 dvec3 64비트 벡터는 여러 슬롯을 사용합니다. 이는 그 뒤에 오는 location의 인덱스가 최소 2 이상 높아야 함을 의미합니다. - https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description
+layout(location = 0) in vec2 inPosition;
+layout(location = 1) in vec3 inColor;
 
 
-// 프레그먼트 셰이더로 컬러값 전달하기
+// 프레그먼트 셰이더로 컬러값을 전달합니다.
 layout(location = 0) out vec3 fragColor;
 
 
@@ -34,10 +36,13 @@ void main()
 	// gl_VertexIndex : GLSL의 gl_VertexID와 동일, 처음 렌더링 명령이 시작될 때부터 지금까지 처리된 버텍스가 몇번째인지 담고 있음
 	// 0.0 : z 축 위치값
 	// 1.0 : w 값 (Clip coordinate 에서 Normalized Device Coordinate 로 가기 위해 최종적으로 모든 위치 스칼라들을 이 수로 나눔)
-	gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
-	fragColor = colors[gl_VertexIndex]; // 프레그먼트 셰이더로 전달할때 중간값 보간 자동으로 수행
+	
+	// 하드코딩된 테스트 삼각형 출력용
+	//gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+	//fragColor = colors[gl_VertexIndex]; // 프레그먼트 셰이더로 전달할때 중간값 보간 자동으로 수행
 
 
-	// 버텍스 버퍼로부터 x, y 위치값 전달 받아서
-	//gl_Position = vec4(position, 0.0, 1.0);
+	// 버텍스 버퍼로부터 x, y 위치값 전달 받아서 출력
+	gl_Position = vec4(inPosition, 0.0, 1.0);
+	fragColor = inColor;
 }

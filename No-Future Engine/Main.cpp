@@ -3,8 +3,7 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // OpenGL과 다르게 0 ~ 1 스케일 깊이 값을 사용합니다.
-#include <glm/vec4.hpp>
-#include <glm/mat4x4.hpp>
+#include <glm/glm.hpp>
 
 #include <iostream>         // 
 #include <fstream>          // 셰이더 소스를 읽기 위함
@@ -15,18 +14,28 @@
 #include <cstdlib>          // EXIT_SUCCESS, EXIT_FAILURE 매크로
 #include <cstdint>          // uint32_t 사용
 #include <limits>           // std::numeric_limits 사용
+#include <array>            // 버텍스 배열 저장에 사용
 #include <optional>         // 그래픽카드가 해당 큐 패밀리를 지원하는지 여부 검사
 #include <set>              // 사용할 모든 큐 패밀리 셋을 모아서 관리
 
-#define HELPER_FUNCTION inline    // 코드 가독성을 위해 핼퍼 함수 표시용
+// 디버그 관련
+#ifdef NDEBUG
+constexpr bool enableValidationLayers = false;
+#else
+constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검증 레이어 활성화
+#endif
 
+// 코드 가독성을 위해 핼퍼 함수 표시용
+#define HELPER_FUNCTION inline
 
-// 윈도우 해상도
+// 초기 윈도우 해상도 설정
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
-// 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수
-// CPU가 GPU보다 너무 앞서는 것을 원하지 않기 때문에 숫자 2를 선택합니다. 2개의 프레임이 비행 중이면 CPU와 GPU가 동시에 자체 작업을 수행할 수 있습니다. CPU가 일찍 끝나면 GPU가 렌더링을 마칠 때까지 기다렸다가 추가 작업을 제출합니다. 3개 이상의 프레임이 비행 중이면 CPU가 GPU보다 앞서서 지연 프레임이 추가될 수 있습니다. 일반적으로 추가 대기 시간은 바람직하지 않습니다. 그러나 비행 중인 프레임 수에 대한 애플리케이션 제어 권한을 부여하는 것은 Vulkan이 명시적임을 보여주는 또 다른 예입니다. 그런 다음 여러 명령 버퍼를 만들어야 합니다. createCommandBuffer의 이름을 createCommandBuffers로 바꿉니다. 다음으로 명령 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 크기로 조정하고 VkCommandBufferAllocateInfo를 변경하여 많은 명령 버퍼를 포함한 다음 대상을 명령 버퍼의 벡터로 변경해야 합니다.
-const int MAX_FRAMES_IN_FLIGHT = 2;
+
+// 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수 설정
+// CPU가 GPU보다 너무 앞서는 것을 원하지 않기 때문에 숫자 2를 선택합니다. 2개의 프레임이 비행 중이면 CPU와 GPU가 동시에 자체 작업을 수행할 수 있습니다. CPU가 일찍 끝나면 GPU가 렌더링을 마칠 때까지 기다렸다가 추가 작업을 제출합니다. 3개 이상의 프레임이 비행 중이면 CPU가 GPU보다 앞서서 지연 프레임이 추가될 수 있습니다. 일반적으로 추가 대기 시간은 바람직하지 않습니다. 그러나 비행 중인 프레임 수에 대한 애플리케이션 제어 권한을 부여하는 것은 Vulkan이 명시적임을 보여주는 또 다른 예입니다. 그런 다음 여러 커맨드 버퍼를 만들어야 합니다. createCommandBuffer의 이름을 createCommandBuffers로 바꿉니다. 다음으로 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 크기로 조정하고 VkCommandBufferAllocateInfo를 변경하여 많은 커맨드 버퍼를 포함한 다음 대상을 커맨드 버퍼의 벡터로 변경해야 합니다.
+constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
 
 
 // 필요한 검증 레이어 목록
@@ -39,12 +48,6 @@ const std::vector<const char*> deviceExtensions {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME, // 모든 그래픽 카드가 화면 출력을 지원하지는 않으므로 불칸은 스왑 체인을 확장 기능으로 만들었습니다. VK_KHR_swapchain 을 장치가 지원하는지 확인하고 이 확장을 추가해야 합니다.
 };
 
-// 디버그 관련
-#ifdef NDEBUG
-constexpr bool enableValidationLayers = false;
-#else
-constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검증 레이어 활성화
-#endif
 
 
 // PFN_vkCreateDebugUtilsMessengerEXT 함수는 디버깅 정보 출력용 메신저 도구 개체를 만들때 사용하며, 안타깝게도 확장 함수이기 때문에 자동으로 로드되지 않습니다. vkGetInstanceProcAddr 를 사용하여 함수 주소를 직접 찾아야 합니다. 이를 처리하는 자체 프록시(래퍼) 함수를 만들 것입니다.
@@ -62,7 +65,6 @@ HELPER_FUNCTION VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const
     }
 }
 
-
 // PFN_vkDestroyDebugUtilsMessengerEXT 함수도 마찬가지로 확장 함수라서 함수 주소를 직접 받아서 사용해야 합니다. 디버깅 정보 출력용 메신저 도구 개체의 소멸을 책임집니다.
 HELPER_FUNCTION void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
 {
@@ -72,6 +74,7 @@ HELPER_FUNCTION void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugU
         func(instance, debugMessenger, pAllocator);
     }
 }
+
 
 
 // 그래픽카드가 필요한 큐 패밀리를 지원하는지 한꺼번에 정리해서 검사하기 위한 구조체
@@ -98,6 +101,72 @@ struct SwapChainSupportDetails
     VkSurfaceCapabilitiesKHR capabilities;      // 1) 기본 서피스 기능 (스왑 체인의 최소/최대 이미지 수, 이미지의 최소/최대 너비 및 높이)
     std::vector<VkSurfaceFormatKHR> formats;    // 2) 서피스 형식 (픽셀 형식, 색 공간)
     std::vector<VkPresentModeKHR> presentModes; // 3) 사용 가능한 프레젠테이션 모드
+};
+
+
+// 버텍스 셰이더에 넣을 버텍스 정보를 담고 있는 구조체
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec3 color;
+
+    // 버텍스 데이터들을 GPU 메모리에 업로드할때 버텍스 셰이더에 어떤 형태로 전달하면 될지 Vulkan에 알리는 것입니다. 이 정보를 전달하는 데 필요한 구조에는 두 가지 유형이 있습니다.
+    // 첫 번째 구조는 VkVertexInputBindingDescription이며 올바른 데이터로 채우기 위해 Vertex 구조 정보를 반환하는 멤버 함수를 추가합니다.
+    static VkVertexInputBindingDescription getBindingDescription()
+    {
+        // 버텍스 바인딩 설명(VkVertexInputBindingDescription)은 버텍스 전체에 걸쳐 메모리에서 데이터를 로드하는 방법을 설명합니다. 데이터 항목 사이의 바이트 수와 각 정점 이후 또는 각 인스턴스 이후에 다음 데이터 항목으로 얼만큼 건너뛰며 이동할지 여부를 지정합니다.
+        // 모든 정점별 데이터는 하나의 배열에 함께 포장되므로 하나의 바인딩만 갖게 됩니다. 바인딩 매개변수는 바인딩 배열의 바인딩 인덱스를 지정합니다.
+        VkVertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0;
+        // stride 매개변수는 한 항목에서 다음 항목까지의 바이트 수를 지정하고 inputRate 매개변수는 다음 값 중 하나를 가질 수 있습니다.
+        // VK_VERTEX_INPUT_RATE_VERTEX: 각 정점 뒤의 다음 데이터 항목으로 이동
+        // VK_VERTEX_INPUT_RATE_INSTANCE: 각 인스턴스 후 다음 데이터 항목으로 이동
+        bindingDescription.stride = sizeof(Vertex);
+        // 인스턴스 렌더링을 사용하지 않을 것이므로 정점별 데이터를 사용하겠습니다.
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        return bindingDescription;
+    }
+
+    // 버텍스 입력을 처리하는 방법을 설명하는 두 번째 구조는 VkVertexInputAttributeDescription입니다. 이 구조체를 채우기 위해 버텍스에 다른 헬퍼 함수를 추가할 것입니다.
+    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        // 버텍스 속성 설명(VkVertexInputAttributeDescription)은 바인딩 설명에서 비롯된 버텍스 데이터 청크에서 버텍스 속성들을 추출하는 방법을 설명합니다. 현재 버텍스에는 위치와 색상이라는 두 개의 속성이 있으므로 두 개의 속성 설명 구조체가 필요합니다.
+        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+        // binding 매개변수는 버텍스별로 어떤 바인딩 값을 가지는지 알려줍니다.
+        attributeDescriptions[0].binding = 0;
+        // location 매개변수는 버텍스 셰이더에서 작성한 입력의 location 지시자(directive) 값을 나타냅니다. 
+        attributeDescriptions[0].location = 0;
+        // format 매개변수는 데이터 유형을 설명합니다. 위치가 0인 버텍스 셰이더의 입력으로 두 개의 32비트 부동 소수점을 전달할 것임을 설명합니다. 약간 혼란스럽게도 format은 위치값이라 하더라도 색상 형식을 나타내는 열거형(enum)을 사용하여 설명합니다.
+        // 다음 셰이더 유형 및 형식은 일반적으로 함께 사용됩니다.
+        // float    : VK_FORMAT_R32_SFLOAT
+        // vec2     : VK_FORMAT_R32G32_SFLOAT
+        // vec3     : VK_FORMAT_R32G32B32_SFLOAT
+        // vec4     : VK_FORMAT_R32G32B32A32_SFLOAT
+        // 보시다시피 색상 채널의 수가 셰이더 데이터 유형의 구성 요소 수와 일치하는 형식을 사용해야 합니다. 셰이더의 구성 요소 수보다 더 많은 채널을 사용할 수 있지만 초과된 채널들은 셰이더에서 무시됩니다. 채널 수가 구성 요소 수보다 적으면 BGA 구성 요소는 기본값(0, 0, 1)을 사용합니다. 색상 유형(SFLOAT, UINT, SINT) 및 비트 너비도 셰이더 입력 유형과 일치해야 합니다. 다음 예를 참조하십시오.
+        // ivec2: VK_FORMAT_R32G32_SINT, 32비트 부호 있는 정수의 2성분 벡터
+        // uvec4 : VK_FORMAT_R32G32B32A32_UINT, 32비트 부호 없는 정수의 4성분 벡터
+        // double : VK_FORMAT_R64_SFLOAT, 배정밀도(64비트) 부동 소수점
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(Vertex, position);
+
+        // format 매개변수는 속성 데이터의 바이트 크기를 암시적으로 정의하고 offset 매개변수는 읽을 버텍스별 데이터의 시작 이후 건너뛸 바이트 수를 지정합니다. binding은 한 번에 하나의 버텍스을 로드하고 컬러 데이터 속성(color)은 이 전체 버텍스 데이터의 시작 부분에서 8바이트 오른쪽(offset)에 있습니다. 이것은 offsetof 매크로를 사용하여 자동으로 계산됩니다.
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+        return attributeDescriptions;
+    }
+};
+
+const std::vector<Vertex> vertices = {
+    // GLM 은 사용하기 편하도록 셰이더 언어에서 사용되는 벡터 타입과 정확히 일치하는 C++ 타입을 제공합니다.
+    // interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상} }
+    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 };
 
 
@@ -129,9 +198,13 @@ private:
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
-    std::vector<VkCommandBuffer> commandBuffers;        // 커맨드 버퍼. 커멘드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 명령 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
+    
+    VkBuffer vertexBuffer;                              // 
+    VkDeviceMemory vertexBufferMemory;                  // 
 
-    // 동시에 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수만큼 각 프레임에는 자체 명령 버퍼, 세마포어 및 펜스 세트가 있어야 합니다. 이름을 바꾼 다음 객체의 std::vectors로 변경합니다.
+    std::vector<VkCommandBuffer> commandBuffers;        // 커맨드 버퍼. 커맨드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 커맨드 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
+
+    // 동시에 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수만큼 각 프레임에는 자체 커맨드 버퍼, 세마포어 및 펜스 세트가 있어야 합니다. 이름을 바꾼 다음 객체의 std::vectors로 변경합니다.
     std::vector<VkSemaphore> imageAvailableSemaphores;              // 이미지가 스왑체인에서 획득되었고 렌더링할 준비가 되었음을 알리는 세마포어
     std::vector<VkSemaphore> renderFinishedSemaphores;              // 렌더링이 완료되어 프레젠테이션이 발생할 수 있음을 알리는 세마포어
     std::vector<VkFence> inFlightFences;                            // 한 번에 하나의 프레임만 렌더링 되도록 확인하는 펜스
@@ -216,11 +289,13 @@ private:
 
         createFramebuffers();       // 2-9. 프레임 버퍼들을 생성
 
-        createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀(명령 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
+        createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createCommandBuffers();      // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
+        createVertexBuffer();       // 2-11. 버텍스 버퍼 생성
 
-        createSyncObjects();        // 2-12. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+        createCommandBuffers();      // 2-12. 그래픽 카드로 보낼 커맨드 버퍼 생성
+
+        createSyncObjects();        // 2-13. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
 
     }
 
@@ -348,8 +423,6 @@ private:
             }
         }
     }
-
-
 
     // 디버깅용 콜백 함수는 static 멤버 함수로 만들어야 하며 PFN_vkDebugUtilsMessengerCallbackEXT 의 프로토타입이어야 합니다. VKAPI_ATTR 와 VKAPI_CALL 가 함수의 시그니쳐가 올바르도록 보장하며 Vulkan이 이 함수를 콜할 수 있게 합니다. debugCallback(메세지의 심각도, 메세지의 특성, 메세지 내용, 특수 데이터 전달용)
     // Needs to be a new static member function called debugCallback with the PFN_vkDebugUtilsMessengerCallbackEXT prototype. The VKAPI_ATTR and VKAPI_CALL ensure that the function has the right signature for Vulkan to call it.
@@ -521,8 +594,6 @@ private:
         std::cout << '\t' << "geometryShader supported: " << deviceFeatures.geometryShader << '\n';
     }
 
-
-
     // 불칸에서 모든 명령은 큐에 넣어서 그래픽 카드에 보내야 합니다. 사실 큐 종류는 여러개이며 어떤 큐는 그래픽 명령을 처리하지 않고 컴퓨트 명령만 처리하기도 하고 메모리 전송만 하기도 합니다. 물론 다양한 종류의 명령을 동시에 처리하는 큐도 있습니다. 이러한 큐 종류를 큐 패밀리라고 부릅니다. 우리가 사용해야할 큐 패밀리를 그래픽카드가 모두 지원하는지 확인해야 합니다.
     HELPER_FUNCTION QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
     {
@@ -589,7 +660,7 @@ private:
         // 각각의 큐 패밀리를 위해 만든 queueCreateInfo 정보들을 벡터 리스트로 저장합니다.
         for (uint32_t queueFamily : uniqueQueueFamilies)
         {
-            // 2-4-1. 하나의 큐 패밀리 안에서 사용할 큐의 갯수를 설정합니다. 지금은 그래픽스 큐, 프레젠트 큐 하나씩을 달라고 요청하고 있습니다. 사실 큐는 그렇게 많이 필요하지 않으며, 일반적으로 1개면 충분합니다. 왜냐하면 커멘드 버퍼들을 멀티 스레드로 많이 만든 후에 큐로 제출할때는 메인 스레드에서 한번에 모아 하나의 큐로 묶어 제출하기 때문입니다. Vulkan에서 큐는 커맨드 버퍼를 그래픽카드에 공급하는 매체 역할을 합니다.
+            // 2-4-1. 하나의 큐 패밀리 안에서 사용할 큐의 갯수를 설정합니다. 지금은 그래픽스 큐, 프레젠트 큐 하나씩을 달라고 요청하고 있습니다. 사실 큐는 그렇게 많이 필요하지 않으며, 일반적으로 1개면 충분합니다. 왜냐하면 커맨드 버퍼들을 멀티 스레드로 많이 만든 후에 큐로 제출할때는 메인 스레드에서 한번에 모아 하나의 큐로 묶어 제출하기 때문입니다. Vulkan에서 큐는 커맨드 버퍼를 그래픽카드에 공급하는 매체 역할을 합니다.
             VkDeviceQueueCreateInfo queueCreateInfo{};
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.queueFamilyIndex = queueFamily;
@@ -743,8 +814,6 @@ private:
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
     }
-
-
 
     // 스왑 체인의 디테일한 기능들을 모두 지원하는지 자세히 확인합니다.
     HELPER_FUNCTION SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device)
@@ -993,6 +1062,7 @@ private:
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
+
         // 2-8-3. 셰이더 스테이지를 설정합니다. 셰이더를 사용하기 위해서는 특정한 파이프라인 스테이지에 배치하여야 합니다.
         // 버텍스 셰이더 스테이지를 정의합니다.
         VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
@@ -1026,13 +1096,16 @@ private:
         // 버텍스 데이터 형식은 크게 두가지 방법으로 표현됩니다.
         // Bindings: 데이터 사이의 간격 및 데이터가 버텍스당인지 또는 인스턴스당인지 여부( 인스턴싱 참조 )
         // Attribute descriptions : 정점 셰이더에 전달된 속성의 유형, 속성을 로드할 바인딩 및 오프셋
-        // @@ 일단 현재는 버텍스 데이터를 셰이더에 하드 코딩 했으므로 읽어들일 정점 정보가 없습니다. 나중에 버텍스 버퍼를 받을때 사용하겠습니다.
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount = 0;
-        vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
-        vertexInputInfo.vertexAttributeDescriptionCount = 0;
-        vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+        // 우리가 직접 구성한 버텍스 데이터를 허용하도록 그래픽 파이프라인을 설정해야 합니다. 위에서 미리 만들어둔 Vertex::getBindingDescription() 와 Vertex::getAttributeDescriptions() 를 사용해서 설정값을 채웁니다.
+        auto bindingDescription = Vertex::getBindingDescription();
+        auto attributeDescriptions = Vertex::getAttributeDescriptions();
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+        // 파이프라인은 이제 설정한 버텍스 컨테이너 형식의 버텍스 데이터를 받아 버텍스 셰이더에 전달할 준비가 되었습니다. 유효성 검사 레이어가 활성화된 상태에서 프로그램을 실행하면 바인딩된 버텍스 버퍼가 없다고 불평하는 것을 볼 수 있습니다. @@ 다음 단계는 버텍스 버퍼를 만들고 버텍스 데이터를 GPU가 액세스할 수 있도록 버텍스 버퍼로 이동하는 것입니다.
 
 
         // 2-8-5. 버텍스 데이터들을 가지고 어떤 방식으로 지오메트리를 그릴지, 그리고 다른 프리미티브로 그리기 여부를 설정합니다. 일반적으로 버텍스은 인덱스에 따라 버텍스 버퍼에서 순차적으로 로드되지만 element 버퍼 를 사용하면 인덱스를 지정하여 사용할 수 있습니다. 이를 통해 버텍스 재사용과 같은 최적화를 수행할 수 있습니다. primitiveRestartEnable 멤버를 VK_TRUE로 설정하면 0xFFFF 또는 0xFFFFFFFF 같은 특수 인덱스를 사용하여 _STRIP 토폴로지 모드에서 선과 삼각형을 분할할 수 있습니다.
@@ -1096,7 +1169,7 @@ private:
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         // 레스터화에 사용할 선분의 굵기를 설정합니다. 지원되는 최대 라인 너비는 그래픽 카드에 따라 다르며 1.0f 보다 두꺼운 라인은 wideLines GPU 기능을 활성화해야 합니다.
         rasterizer.lineWidth = 1.0f;
-        // 표면 컬링 유형을 결정합니다. 컬링을 비활성화하거나, 앞면을 컬링하거나, 뒷면을 컬링하거나, 둘 모두를 컬링할 수 있습니다. frontFace 변수는 정면으로 간주되는 면의 꼭짓점 순서를 지정하며 시계 방향 (왼손 중심) 또는 시계 반대 방향 (오른손 중심) 일 수 있습니다.
+        // 표면 컬링 유형을 결정합니다. 컬링을 비활성화하거나, 앞면을 컬링하거나, 뒷면을 컬링하거나, 둘 모두를 컬링할 수 있습니다. frontFace 변수는 정면으로 간주되는 면의 버텍스 순서를 지정하며 시계 방향 (왼손 중심) 또는 시계 반대 방향 (오른손 중심) 일 수 있습니다.
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
         rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
         // 바이어스 값을 사용하여 (상수를 더해) 깊이 값을 계산합니다. 이것은 때때로 그림자 매핑에 사용되지만 우리는 사용하지 않을 것입니다. depthBiasEnable을 VK_FALSE로 설정하기만 하면 됩니다.
@@ -1169,7 +1242,7 @@ private:
         // ------------- 이 아래로는 런타임에 셰이더에서 참조하는 uniform 과 push values 값들에 대한 설정 (Pipeline layout) 입니다. -------------
 
         // 2-8-14. 파이프라인 레이아웃을 설정합니다. (파이프라인 레이아웃은 사실 스왑 체인에 묶여서 생성되고 파괴되지 않아도 되는 별개의 존재라고 합니다.. 유연한 셰이더 스위칭을 위해 셰이더 모듈과 함께 나중에 별도의 파일로 분리하는게 좋을 것 같습니다.)
-        // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 정점 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
+        // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 버텍스 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 0; // Optional
@@ -1316,20 +1389,20 @@ private:
 
 
 
-    // 2-10. 그래픽 카드로 보낼 명령 풀(명령 버퍼 모음) 생성
+    // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성
     inline void createCommandPool()
     {
-        // 그리기 작업 및 메모리 전송과 같은 Vulkan의 명령은 함수 호출을 사용하여 직접 실행되지 않습니다. 명령 버퍼 개체에 수행하려는 모든 작업을 기록해야 합니다. 이것의 장점은 우리가 하고 싶은 것을 Vulkan 에게 한꺼번에 전달하고 Vulkan이 모든 명령을 함께 사용할 수 있기 때문에 명령을 더 효율적으로 처리할 수 있습니다. 또한 원하는 경우 여러 스레드에서 명령 기록을 수행할 수도 있습니다.
+        // 그리기 작업 및 메모리 전송과 같은 Vulkan의 명령은 함수 호출을 사용하여 직접 실행되지 않습니다. 커맨드 버퍼 개체에 수행하려는 모든 작업을 기록해야 합니다. 이것의 장점은 우리가 하고 싶은 것을 Vulkan 에게 한꺼번에 전달하고 Vulkan이 모든 명령을 함께 사용할 수 있기 때문에 명령을 더 효율적으로 처리할 수 있습니다. 또한 원하는 경우 여러 스레드에서 명령 기록을 수행할 수도 있습니다.
         QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         // 명령 풀에는 두 가지 가능한 플래그가 있습니다.
-        // VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: 명령 버퍼가 새 명령으로 매우 자주 다시 기록된다는 힌트를 줍니다. (메모리 할당 동작이 변경될 수 있음)
-        // VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : 명령 버퍼가 개별적으로 다시 기록되도록 허용합니다. 이 플래그가 없으면 vkResetCommandPool을 사용해 모두 함께 재설정해야 합니다.
+        // VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: 커맨드 버퍼가 새 명령으로 매우 자주 다시 기록된다는 힌트를 줍니다. (메모리 할당 동작이 변경될 수 있음)
+        // VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : 커맨드 버퍼가 개별적으로 다시 기록되도록 허용합니다. 이 플래그가 없으면 vkResetCommandPool을 사용해 모두 함께 재설정해야 합니다.
         // 우리는 매 프레임마다 커맨드 버퍼를 기록할 것이기 때문에 리셋하고 다시 기록할 수 있기를 원합니다. 따라서 명령 풀에 대해 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT 플래그 비트를 설정해야 합니다.
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        // 명령 버퍼는 우리가 마련해둔 그래픽 큐, 프레젠테이션 큐와 같은 하나의 큐에 제출함으로써 실행됩니다. 명령 풀에 사용할 하나의 큐 페밀리 종류만 할당 가능합니다. 그리기 명령을 기록할 것이므로 그래픽 큐 제품군을 선택했습니다.
+        // 커맨드 버퍼는 우리가 마련해둔 그래픽 큐, 프레젠테이션 큐와 같은 하나의 큐에 제출함으로써 실행됩니다. 명령 풀에 사용할 하나의 큐 페밀리 종류만 할당 가능합니다. 그리기 명령을 기록할 것이므로 그래픽 큐 제품군을 선택했습니다.
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
         // 명령 풀을 생성합니다. 특별한 매개변수가 없습니다.
@@ -1341,22 +1414,106 @@ private:
 
 
 
-    // 2-11. 그래픽 카드로 보낼 명령 버퍼 생성
+    // 2-11. 버텍스 버퍼 생성
+    // Vulkan의 버퍼는 그래픽 카드에서 읽을 수 있는 임의의 데이터를 저장하는 데 사용되는 메모리 영역입니다. 그것들은 버텍스 데이터를 저장하는 데 사용할 수 있으며, 물론 다른 많은 목적으로도 사용할 수 있습니다. 지금까지 다루었던 Vulkan 객체들과 달리 버퍼는 자동으로 메모리를 할당하지 않습니다. Vulkan API는 프로그래머가 거의 모든 것을 제어할 수 있도록 던져주며 메모리 관리는 그 중에 하나입니다.
+    inline void createVertexBuffer()
+    {
+        // 버퍼를 생성하려면 VkBufferCreateInfo 구조체를 채워야 합니다.
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        // 구조체의 첫 번째 필드는 버퍼의 크기를 바이트 단위로 지정하는 크기입니다. 버텍스 데이터의 바이트 크기를 계산하는 것은 sizeof를 사용하면 간단합니다.
+        bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+        // 두 번째 필드는 버퍼의 데이터가 어떤 용도로 사용될 것인지를 나타내는 사용량입니다. 비트 연산인 |(OR) 를 사용하여 여러 목적을 지정할 수 있습니다. 우리의 사용 사례는 버텍스 버퍼가 될 것이며, 향후 장에서 다른 유형의 사용을 살펴볼 것입니다.
+        bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        // 스왑 체인의 이미지와 마찬가지로 버퍼는 특정 큐 패밀리가 소유하거나 여러 큐에서 동시에 공유할 수도 있습니다. 버퍼는 그래픽스 큐에서만 사용되므로 독점 액세스를 유지 하겠습니다.
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        // flags 매개변수는 현재 관련이 없는 희소(sparse) 버퍼 메모리를 구성하는 데 사용됩니다. 기본값 0으로 두겠습니다.
+        //bufferInfo.flags = 0;
+
+        // 이제 vkCreateBuffer로 버퍼를 생성할 수 있습니다.버퍼 핸들을 보유하고 vertexBuffer라고 부르는 클래스 멤버를 정의하십시오.
+        if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create vertex buffer!");
+        }
+
+        // 버퍼가 생성되었지만 실제로 아직 할당된 메모리가 없습니다. 버퍼에 메모리를 할당하는 첫 번째 단계는 적절하게 명명된 vkGetBufferMemoryRequirements 함수를 사용하여 메모리 요구 사항을 설정하는 것입니다.
+        // VkMemoryRequirements 구조체에는 세 개의 필드가 있습니다.
+        // size             : 필요한 메모리 크기(바이트)로 bufferInfo.size와 다를 수 있습니다.
+        // alignment        : 할당된 메모리 영역에서 버퍼가 시작되는 오프셋(바이트)은 bufferInfo.usage 및 bufferInfo.flags에 따라 다릅니다.
+        // memoryTypeBits   : 버퍼에 적합한 메모리 유형의 비트 필드입니다.
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
+
+        // 이제 findMemoryType 를 통해 그래픽카드가 해당 메모리 타입을 지원하는지 확인하여 VkMemoryAllocateInfo 구조를 채워 메모리를 실제로 할당할 수 있습니다.
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        // 메모리 할당은 이제 정점 버퍼의 메모리 요구 사항과 원하는 속성에서 파생된 크기와 유형을 지정하는 것 만큼 간단합니다. 클래스 멤버를 만들어 핸들을 저장하고 vkAllocateMemory 로 메모리를 할당합니다.
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to allocate vertex buffer memory!");
+        }
+
+        // 메모리 할당이 성공했다면 이제 vkBindBufferMemory를 사용하여 이 메모리를 버퍼와 연결할 수 있습니다.
+        // 네 번째 매개변수는 메모리 영역 내의 오프셋입니다. 이 메모리는 이 버텍스 버퍼를 위해 특별히 할당되었기 때문에 오프셋은 단순히 0입니다. 오프셋이 0이 아닌 경우 memRequirements.alignment로 나눌 수 있어야 합니다.
+        vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+
+        // 이제 정점 데이터를 버퍼에 복사할 차례입니다. 이것은 vkMapMemory를 사용하여 버퍼 메모리를 CPU 액세스 가능한 메모리에 매핑하여 수행됩니다. 이 함수를 사용하면 오프셋과 크기로 정의된 지정된 메모리 리소스 영역에 액세스할 수 있습니다. 여기서 오프셋과 크기는 각각 0과 bufferInfo.size입니다. 모든 메모리를 매핑하기 위해 특수 값 VK_WHOLE_SIZE를 지정할 수도 있습니다. 마지막에서 두 번째 매개변수는 플래그를 지정하는 데 사용할 수 있지만 현재 API에서는 아직 사용할 수 없습니다. 값을 0으로 설정해야 합니다. 마지막 매개변수는 매핑된 메모리에 대한 포인터의 출력을 지정합니다.
+        void* data;
+        vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+        // 이제 정점 데이터를 매핑된 메모리에 memcpy하고 vkUnmapMemory를 사용하여 다시 매핑 해제할 수 있습니다. 불행히도 드라이버는 예를 들어 캐싱 때문에 버퍼 메모리에 데이터를 즉시 복사하지 않을 수 있습니다. 버퍼에 대한 쓰기가 아직 매핑된 메모리에 표시되지 않을 수도 있습니다.
+        // 해당 문제를 처리하는 두 가지 방법이 있습니다.
+        // 1. VK_MEMORY_PROPERTY_HOST_COHERENT_BIT로 표시된 호스트 일관성 있는 메모리 힙 사용
+        // 2. 매핑된 메모리에 쓴 후 vkFlushMappedMemoryRanges를 호출하고 매핑된 메모리에서 읽기 전에 vkInvalidateMappedMemoryRanges를 호출
+        // 매핑된 메모리가 항상 할당된 메모리의 내용과 일치하도록 하는 첫 번째 접근 방식을 사용했습니다. 이것은 명시적 플러시보다 성능이 약간 더 나빠질 수 있음을 명심하십시오. 그러나 이것이 중요하지 않은 이유는 다음 장에서 살펴보겠습니다.
+        memcpy(data, vertices.data(), (size_t)bufferInfo.size);
+        // 메모리 범위를 플러시하거나 일관된 메모리 힙을 사용한다는 것은 드라이버가 버퍼에 대한 쓰기를 인식한다는 것을 의미하지만 아직 GPU에서 실제로 볼 수 있다는 의미는 아닙니다. GPU로의 데이터 전송은 백그라운드에서 발생하는 작업이며 사양은 단순히 vkQueueSubmit에 대한 다음 호출 시점에서 완료가 보장된다고 알려줍니다.
+        vkUnmapMemory(device, vertexBufferMemory);
+    }
+
+    // 그래픽 카드는 할당할 다양한 유형의 메모리를 제공할 수 있습니다. 각 메모리 유형은 허용되는 작업 및 성능 특성 측면에서 다릅니다. 사용할 올바른 유형의 메모리를 찾으려면 버퍼의 요구 사항과 자체 응용 프로그램 요구 사항을 결합해야 합니다.이를 위해 새로운 함수 findMemoryType을 생성해 보겠습니다.
+    HELPER_FUNCTION uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+    {
+        // 먼저 vkGetPhysicalDeviceMemoryProperties를 사용하여 사용 가능한 메모리 유형에 대한 정보를 설정해야 합니다.
+        VkPhysicalDeviceMemoryProperties memProperties;
+        // VkPhysicalDeviceMemoryProperties 구조에는 두 개의 배열 memoryTypes 및 memoryHeaps가 있습니다. 메모리 힙은 전용 VRAM 및 VRAM 이 부족할 때를 위한 RAM 의 스왑 공간과 같은 고유한 메모리 리소스입니다. 이러한 힙에는 다양한 유형의 메모리가 있습니다. 지금은 메모리 유형에만 관심이 있고 메모리가 가져온 힙에는 관심이 없지만 이것이 성능에 영향을 미칠 수 있다고 상상할 수 있습니다.
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+        // 먼저 버퍼 자체에 적합한 메모리 유형을 찾아보겠습니다.
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+        {
+            // typeFilter 매개변수는 적합한 메모리 유형의 비트 필드를 지정하는 데 사용됩니다. 즉, 단순히 연속적으로 해당 인덱스 번째의 비트가 1로 설정되어 있는지 찾아가며 적절한 메모리 유형의 인덱스를 찾을 수 있습니다. 그러나 정점 버퍼에 적합한 메모리 유형에만 관심이 있는 것은 아닙니다.또한 정점 데이터를 해당 메모리에 쓸 수 있어야 합니다. memoryTypes 배열은 각 메모리 유형의 힙 및 속성을 지정하는 VkMemoryType 구조체로 구성됩니다. 속성은 CPU 에서 메모리에 쓸 수 있도록 매핑할 수 있는 것과 같은 메모리의 특수 기능을 정의합니다.이 속성은 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT로 표시되지만 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT 속성도 사용해야 합니다. 메모리를 매핑할 때 그 이유를 알게 될 것입니다.
+            // 추가로 하나 이상의 원하는 속성이 있을 수 있으므로 비트 AND 의 결과가 0 이 아니라 원하는 속성 비트 필드와 같은지 확인해야 합니다. 필요한 모든 속성을 포함하는 버퍼에 적합한 메모리 유형이 있으면 해당 인덱스를 반환하고, 그렇지 않으면 예외를 throw 합니다.
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("Failed to find suitable memory type!");
+    }
+
+
+
+    // 2-12. 그래픽 카드로 보낼 커맨드 버퍼 생성
     inline void createCommandBuffers()
     {
-        // 
+        // 각각의 프레임 마다 커맨드 버퍼가 존재해야 하므로, 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 만큼으로 조정합니다.
         commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
+        // VkCommandBufferAllocateInfo를 변경하여 사용할 다수의 커맨드 버퍼를 포함해야 합니다.
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         // 사용할 명령 풀 정보입니다.
         allocInfo.commandPool = commandPool;
-        // level 매개변수는 할당된 명령 버퍼가 주요 또는 보조 명령 버퍼인지 지정합니다.
-        // VK_COMMAND_BUFFER_LEVEL_PRIMARY : 실행을 위해 직접 큐에 제출할 수 있지만 다른 명령 버퍼에서 호출할 수는 없습니다.
-        // VK_COMMAND_BUFFER_LEVEL_SECONDARY : 직접 제출할 수 없지만 기본 명령 버퍼에서 호출할 수 있습니다.
-        // 여기서는 보조 명령 버퍼 기능을 사용하지 않겠지만 주요 명령 버퍼에서 일반적인 작업을 재사용하는 것이 도움이 된다고 상상할 수 있습니다.
+        // level 매개변수는 할당된 커맨드 버퍼가 주요 또는 보조 커맨드 버퍼인지 지정합니다.
+        // VK_COMMAND_BUFFER_LEVEL_PRIMARY : 실행을 위해 직접 큐에 제출할 수 있지만 다른 커맨드 버퍼에서 호출할 수는 없습니다.
+        // VK_COMMAND_BUFFER_LEVEL_SECONDARY : 직접 제출할 수 없지만 기본 커맨드 버퍼에서 호출할 수 있습니다.
+        // 여기서는 보조 커맨드 버퍼 기능을 사용하지 않겠지만 주요 커맨드 버퍼에서 일반적인 작업을 재사용하는 것이 도움이 된다고 상상할 수 있습니다.
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        // 할당할 커맨드 버퍼 갯수입니다. 지금으로썬 하나의 커멘드 버퍼만 사용합니다.
+        // 할당할 커맨드 버퍼 갯수입니다.
         allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
         // 커맨드 버퍼를 생성합니다.
@@ -1368,75 +1525,7 @@ private:
 
 
 
-    // 명령 버퍼를 기록하도록 해주는 함수입니다.
-    inline void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
-    {
-        // 이제 실행하려는 명령을 명령 버퍼에 기록하는 recordCommandBuffer 함수 작업을 시작합니다. 사용된 VkCommandBuffer는 쓰기를 원하는 현재 스왑체인 이미지의 인덱스를 인자로 받습니다.
-
-        // 버퍼 기록을 하기 위한 속성값들을 설정합니다.
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        // flags 매개변수는 명령 버퍼를 사용하는 방법을 지정합니다. 다음 값을 사용할 수 있습니다.
-        // VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : 명령 버퍼는 한 번 실행한 직후에 다시 기록됩니다.
-        // VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : 이것은 단일 렌더 패스 내에 완전히 포함될 보조 명령 버퍼입니다.
-        // VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : 명령 버퍼가 이미 실행 보류 중인 동안 다시 제출할 수 있습니다.
-        // 이 플래그 중 어느 것도 현재 우리에게 적용되지 않습니다.
-        beginInfo.flags = 0; // Optional
-        // pInheritanceInfo 매개변수는 보조 명령 버퍼에만 관련됩니다. 호출하는 주요 명령 버퍼에서 상속할 상태를 지정합니다.
-        beginInfo.pInheritanceInfo = nullptr; // Optional
-
-        // vkBeginCommandBuffer를 호출하여 명령 버퍼 기록을 시작합니다.
-        // 명령 버퍼가 이미 한 번 기록된 경우 vkBeginCommandBuffer를 호출하면 암시적으로 재설정됩니다. 재설정 된 후에는 이전 버퍼에 명령을 추가할 수 없습니다.
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to begin recording command buffer!");
-        }
-
-        // 그리기는 vkCmdBeginRenderPass로 렌더 패스를 시작하는 것으로 그리기는 시작됩니다. 렌더 패스는 VkRenderPassBeginInfo 구조체의 일부 매개변수를 사용하여 구성됩니다.
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        // 첫 번째 매개변수는 렌더 패스 자체와 바인딩할 어태치먼트 입니다. 색상 어태치먼트로 지정된 각각의 스왑 체인 이미지에 대해 프레임 버퍼를 만들었습니다. 따라서 그리려는 스왑체인 이미지에 대한 프레임 버퍼를 바인딩해야 합니다. 전달된 imageIndex 매개변수를 사용하여 현재 스왑체인 이미지에 적합한 프레임 버퍼를 선택할 수 있습니다.
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-        // 다음 두 매개변수는 렌더 영역의 크기를 정의합니다. 렌더 영역은 셰이더 로드 및 저장이 수행되는 위치를 정의합니다. 이 영역 밖의 픽셀에는 정의되지 않은 값이 있습니다. 최상의 성능을 위해 첨부 파일의 크기와 일치해야 합니다.
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = swapChainExtent;
-        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 첨부에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다.
-        VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
-
-        // 이제 렌더 패스를 시작할 수 있습니다. 명령을 기록하는 모든 기능은 vkCmd 접두사로 시작합니다. 모두 void를 반환하므로 기록을 마칠 때까지 오류 처리가 없습니다.
-        // 모든 명령의 첫 번째 매개변수는 항상 명령을 기록할 명령 버퍼입니다. 두 번째 매개변수는 방금 제공한 렌더 패스의 세부 정보를 지정합니다. 최종 매개변수는 렌더 패스 내에서 그리기 명령이 제공되는 방식을 제어합니다. 다음 두 값 중 하나를 가질 수 있습니다.
-        // VK_SUBPASS_CONTENTS_INLINE: 렌더 패스 명령은 기본 명령 버퍼 자체에 포함되며 보조 명령 버퍼는 실행되지 않습니다.
-        // VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : 렌더 패스 명령은 보조 명령 버퍼에서 실행됩니다.
-        // 보조 명령 버퍼를 사용하지 않을 것이므로 첫 번째 옵션을 사용하겠습니다.
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        // 이제 그래픽 파이프라인을 바인딩할 수 있습니다.
-        // 두 번째 매개변수는 파이프라인 개체가 그래픽 또는 컴퓨팅 파이프라인인지 지정합니다. 이제 Vulkan에 그래픽 파이프라인에서 실행할 작업과 프래그먼트 셰이더에서 사용할 첨부 파일을 지정했으므로 남은 것은 삼각형을 그리도록 지시하는 것뿐입니다.
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
-        // 실제 vkCmdDraw 함수는 약간 빈약해 보이지만 우리가 이미 설정했던 많은 정보들 때문에 매우 간단하게 구성됩니다. 명령 버퍼를 제외하고 다음 매개변수가 있습니다.
-        // vertexCount: 정점 버퍼가 없더라도 기술적으로 여전히 그릴 정점이 3개 있습니다. (셰이더 코드에)
-        // instanceCount: 인스턴스 렌더링에 사용되며, 그렇게 하지 않는 경우 1을 사용합니다.
-        // firstVertex : 정점 버퍼에 대한 오프셋으로 사용되며 gl_VertexIndex의 가장 낮은 값을 정의합니다.
-        // firstInstance : 인스턴스 렌더링의 오프셋으로 사용되며 gl_InstanceIndex의 가장 낮은 값을 정의합니다.
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0); // @@ 바보 여기를 주석 처리 해놓고 삼각형 왜 안그려지지 하고 있었음..
-
-        // 이제 렌더 패스를 종료할 수 있습니다.
-        vkCmdEndRenderPass(commandBuffer);
-
-        // 그리고 이제 명령 버퍼 기록을 마쳤습니다.
-        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to record command buffer!");
-        }
-    }
-
-
-
-    // 2-12. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+    // 2-13. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     inline void createSyncObjects()
     {
         //
@@ -1453,20 +1542,20 @@ private:
         // 이러한 각 이벤트는 단일 함수 호출을 사용하여 활성화하지만 모두 비동기적으로 실행됩니다. 귀찮게도 함수 호출은 작업이 실제로 완료되기 전에 반환되며 실행 순서도 정의되지 않습니다. 각 작업은 이전 작업의 마무리에 의존하기 때문에 불행한 일입니다. 따라서 요구되는 연산 순서를 달성하기 위해 어떤 프리미티브를 사용할 수 있는지 찾아봐야 합니다.
         
         // 세마포어
-        // 세마포어는 GPU 큐 작업 사이에 순서를 추가하는 데 사용됩니다. 대기열 작업은 명령 버퍼 또는 나중에 보게 될 함수 내에서 대기열에 제출하는 작업을 나타냅니다. 대기열의 예로는 그래픽 대기열과 프레젠테이션 대기열이 있습니다. 세마포어는 동일한 대기열 내부와 다른 대기열 사이에서 작업을 주문하는 데 모두 사용됩니다. Vulkan에는 바이너리와 타임라인의 두 가지 종류의 세마포가 있습니다. 이 튜토리얼에서는 바이너리 세마포어만 사용하기 때문에 타임라인 세마포어에 대해서는 다루지 않겠습니다. 세마포어라는 용어에 대한 앞으로의 언급은 이진 세마포어를 나타냅니다. 세마포어는 신호가 없거나 신호가 있습니다. 그것은 신호가 없이 삶을 시작합니다. 큐 작업을 주문하기 위해 세마포어를 사용하는 방법은 한 큐 작업에서 '신호' 세마포어와 다른 큐 작업에서 '대기' 세마포어로 동일한 세마포어를 제공하는 것입니다. 예를 들어 순서대로 실행하려는 세마포어 S와 대기열 작업 A 및 B가 있다고 가정해 보겠습니다. 우리가 Vulkan에게 말하는 것은 작업 A가 실행이 완료되면 세마포어 S에 '신호'를 보내고 작업 B는 실행을 시작하기 전에 세마포어 S에서 '대기'할 것이라는 것입니다. 작업 A가 완료되면 세마포어 S가 신호를 받는 반면 작업 B는 S가 신호를 받을 때까지 시작되지 않습니다. 작업 B가 실행을 시작하면 세마포어 S가 자동으로 다시 신호가 없는 상태로 재설정되어 다시 사용할 수 있습니다. 세마포어가 어떻게 작동하는지 예시 의사코드는 다음 링크를 참고해주세요. - https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation 이 예시 의사코드 조각에서 vkQueueSubmit()에 대한 두 호출은 모두 즉시 반환됩니다. 대기는 GPU에서만 발생합니다. CPU는 차단 없이 계속 실행됩니다. CPU를 기다리게 하려면 다른 동기화 프리미티브가 필요합니다. 이제 이에 대해 설명하겠습니다.
+        // 세마포어는 GPU 큐 작업 사이에 순서를 추가하는 데 사용됩니다. 대기열 작업은 커맨드 버퍼 또는 나중에 보게 될 함수 내에서 대기열에 제출하는 작업을 나타냅니다. 대기열의 예로는 그래픽 대기열과 프레젠테이션 대기열이 있습니다. 세마포어는 동일한 대기열 내부와 다른 대기열 사이에서 작업을 주문하는 데 모두 사용됩니다. Vulkan에는 바이너리와 타임라인의 두 가지 종류의 세마포가 있습니다. 이 튜토리얼에서는 바이너리 세마포어만 사용하기 때문에 타임라인 세마포어에 대해서는 다루지 않겠습니다. 세마포어라는 용어에 대한 앞으로의 언급은 이진 세마포어를 나타냅니다. 세마포어는 신호가 없거나 신호가 있습니다. 그것은 신호가 없이 삶을 시작합니다. 큐 작업을 주문하기 위해 세마포어를 사용하는 방법은 한 큐 작업에서 '신호' 세마포어와 다른 큐 작업에서 '대기' 세마포어로 동일한 세마포어를 제공하는 것입니다. 예를 들어 순서대로 실행하려는 세마포어 S와 대기열 작업 A 및 B가 있다고 가정해 보겠습니다. 우리가 Vulkan에게 말하는 것은 작업 A가 실행이 완료되면 세마포어 S에 '신호'를 보내고 작업 B는 실행을 시작하기 전에 세마포어 S에서 '대기'할 것이라는 것입니다. 작업 A가 완료되면 세마포어 S가 신호를 받는 반면 작업 B는 S가 신호를 받을 때까지 시작되지 않습니다. 작업 B가 실행을 시작하면 세마포어 S가 자동으로 다시 신호가 없는 상태로 재설정되어 다시 사용할 수 있습니다. 세마포어가 어떻게 작동하는지 예시 의사코드는 다음 링크를 참고해주세요. - https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation 이 예시 의사코드 조각에서 vkQueueSubmit()에 대한 두 호출은 모두 즉시 반환됩니다. 대기는 GPU에서만 발생합니다. CPU는 차단 없이 계속 실행됩니다. CPU를 기다리게 하려면 다른 동기화 프리미티브가 필요합니다. 이제 이에 대해 설명하겠습니다.
         VkSemaphoreCreateInfo semaphoreInfo{};
         //세마포어를 생성하려면 VkSemaphoreCreateInfo를 채워야 하지만 현재 API 버전에서는 실제로 sType 외에 필수 필드가 없습니다.
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
         // 펜스 (울타리)
-        // 펜스는 실행을 동기화하는 데 사용된다는 점에서 세마포어와 유사한 목적을 갖지만 호스트라고도 하는 CPU 에서 실행을 정렬하기 위한 것입니다. 간단히 말해서 호스트가 GPU가 작업을 완료한 시점을 알아야 하는 경우 펜스를 사용합니다. 세마포어와 유사하게 펜스는 신호가 있는 상태이거나 신호가 없는 상태에 있습니다. 어떤 작업이던 제출할 때마다 해당 작업에 펜스를 설정할 수 있습니다. 작업이 끝나면 펜스에 신호가 표시됩니다. 그런 다음 호스트가 펜스가 신호를 받을 때까지 기다리게 하여 호스트가 계속되기 전에 작업이 완료되도록 할 수 있습니다. 구체적인 예는 스크린샷을 찍는 것입니다. GPU에서 필요한 작업을 이미 완료했다고 가정해 보겠습니다. 이제 GPU 에서 호스트로 이미지를 전송한 다음 메모리를 파일에 저장해야 합니다. 예를 들어 전송을 실행하는 명령 버퍼 A와 펜스 F가 있습니다. 펜스 F와 함께 명령 버퍼 A를 제출한 다음 즉시 호스트에게 F가 신호를 보낼 때까지 기다리라고 지시합니다. 이렇게 하면 명령 버퍼 A가 실행을 마칠 때까지 호스트가 차단됩니다. 따라서 메모리 전송이 완료되길 기다리고 호스트가 안전하게 파일을 디스크에 저장하는 것이 가능합니다.. 예시 의사코드는 다음 링크를 참고해주세요. - https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation 세마포어 예제와 달리 이 예제는 호스트(CPU) 실행을 차단합니다. 이것은 호스트가 작업 A 실행이 완료될 때까지 기다리는 것 외에는 아무 것도 하지 않는다는 것을 의미합니다. 이 예시의 경우 스크린샷을 디스크에 저장하기 전에 커맨드 전송이 완료되었는지 보장하기 위한 것입니다. 일반적으로 필요한 경우가 아니면 호스트를 차단하지 않는 것이 좋습니다. 우리는 GPU 와 호스트에 유용한 작업을 계속해서 밀어 넣어야 하기 때문입니다. 펜스에서 신호를 기다리는 것은 효율적인 작업이 아닙니다. 따라서 우리는 작업을 동기화하기 위해 세마포어 또는 아직 다루지 않은 다른 동기화 프리미티브를 선호합니다. 펜스 신호를 비활성화 상태로 되돌리려면 펜스를 수동으로 재설정해야 합니다. 세마포어가 CPU(호스트) 의 관여와 상관없이 GPU 에 들어가는 명령의 순서를 제어하는 것과는 대조적입니다. 요약하면 세마포어는 GPU 에서 작업의 실행 순서를 지정하는 데 사용되는 반면 펜스는 CPU와 GPU가 서로 동기화된 상태를 유지하는 데 사용됩니다. 요약하면 세마포어는 GPU 에서 작업의 실행 순서를 지정하는 데 사용되는 반면 펜스는 CPU 와 GPU가 서로 동기화된 상태를 유지하는 데 사용됩니다.
+        // 펜스는 실행을 동기화하는 데 사용된다는 점에서 세마포어와 유사한 목적을 갖지만 호스트라고도 하는 CPU 에서 실행을 정렬하기 위한 것입니다. 간단히 말해서 호스트가 GPU가 작업을 완료한 시점을 알아야 하는 경우 펜스를 사용합니다. 세마포어와 유사하게 펜스는 신호가 있는 상태이거나 신호가 없는 상태에 있습니다. 어떤 작업이던 제출할 때마다 해당 작업에 펜스를 설정할 수 있습니다. 작업이 끝나면 펜스에 신호가 표시됩니다. 그런 다음 호스트가 펜스가 신호를 받을 때까지 기다리게 하여 호스트가 계속되기 전에 작업이 완료되도록 할 수 있습니다. 구체적인 예는 스크린샷을 찍는 것입니다. GPU에서 필요한 작업을 이미 완료했다고 가정해 보겠습니다. 이제 GPU 에서 호스트로 이미지를 전송한 다음 메모리를 파일에 저장해야 합니다. 예를 들어 전송을 실행하는 커맨드 버퍼 A와 펜스 F가 있습니다. 펜스 F와 함께 커맨드 버퍼 A를 제출한 다음 즉시 호스트에게 F가 신호를 보낼 때까지 기다리라고 지시합니다. 이렇게 하면 커맨드 버퍼 A가 실행을 마칠 때까지 호스트가 차단됩니다. 따라서 메모리 전송이 완료되길 기다리고 호스트가 안전하게 파일을 디스크에 저장하는 것이 가능합니다.. 예시 의사코드는 다음 링크를 참고해주세요. - https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation 세마포어 예제와 달리 이 예제는 호스트(CPU) 실행을 차단합니다. 이것은 호스트가 작업 A 실행이 완료될 때까지 기다리는 것 외에는 아무 것도 하지 않는다는 것을 의미합니다. 이 예시의 경우 스크린샷을 디스크에 저장하기 전에 커맨드 전송이 완료되었는지 보장하기 위한 것입니다. 일반적으로 필요한 경우가 아니면 호스트를 차단하지 않는 것이 좋습니다. 우리는 GPU 와 호스트에 유용한 작업을 계속해서 밀어 넣어야 하기 때문입니다. 펜스에서 신호를 기다리는 것은 효율적인 작업이 아닙니다. 따라서 우리는 작업을 동기화하기 위해 세마포어 또는 아직 다루지 않은 다른 동기화 프리미티브를 선호합니다. 펜스 신호를 비활성화 상태로 되돌리려면 펜스를 수동으로 재설정해야 합니다. 세마포어가 CPU(호스트) 의 관여와 상관없이 GPU 에 들어가는 명령의 순서를 제어하는 것과는 대조적입니다. 요약하면 세마포어는 GPU 에서 작업의 실행 순서를 지정하는 데 사용되는 반면 펜스는 CPU와 GPU가 서로 동기화된 상태를 유지하는 데 사용됩니다. 요약하면 세마포어는 GPU 에서 작업의 실행 순서를 지정하는 데 사용되는 반면 펜스는 CPU 와 GPU가 서로 동기화된 상태를 유지하는 데 사용됩니다.
         VkFenceCreateInfo fenceInfo{};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         // 시그널이 활성화 된 상태로 펜스를 생성하도록 설정합니다.
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
         // 세마포어(GPU) 와 펜스(CPU) 동기화 개체 만들기
-        // 사용할 동기화 프리미티브가 두 개 있고 동기화를 적용할 두 곳이 있습니다. 스왑체인 작업과 이전 프레임이 완료되기를 기다리는 것입니다. GPU에서 발생하기 때문에 스왑체인 작업에 세마포어를 사용하고 싶습니다. 따라서 우리가 도울 수만 있다면 호스트가 기다리게 만들고 싶지 않습니다. 이전 프레임이 끝날 때까지 기다리기 위해 반대 이유로 울타리를 사용하려고 합니다. 호스트가 기다려야 하기 때문입니다. 이것은 한 번에 하나 이상의 프레임을 그리지 않도록 하기 위한 것입니다. 매 프레임마다 명령 버퍼를 다시 기록하기 때문에 현재 프레임의 실행이 완료될 때까지 다음 프레임의 작업을 명령 버퍼에 기록할 수 없습니다. GPU 가 연산하는 동안 명령 버퍼에 새로운 내용을 덮어쓰고 싶지 않기 때문입니다.
+        // 사용할 동기화 프리미티브가 두 개 있고 동기화를 적용할 두 곳이 있습니다. 스왑체인 작업과 이전 프레임이 완료되기를 기다리는 것입니다. GPU에서 발생하기 때문에 스왑체인 작업에 세마포어를 사용하고 싶습니다. 따라서 우리가 도울 수만 있다면 호스트가 기다리게 만들고 싶지 않습니다. 이전 프레임이 끝날 때까지 기다리기 위해 반대 이유로 울타리를 사용하려고 합니다. 호스트가 기다려야 하기 때문입니다. 이것은 한 번에 하나 이상의 프레임을 그리지 않도록 하기 위한 것입니다. 매 프레임마다 커맨드 버퍼를 다시 기록하기 때문에 현재 프레임의 실행이 완료될 때까지 다음 프레임의 작업을 커맨드 버퍼에 기록할 수 없습니다. GPU 가 연산하는 동안 커맨드 버퍼에 새로운 내용을 덮어쓰고 싶지 않기 때문입니다.
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
@@ -1494,8 +1583,8 @@ private:
             // 크게 Vulkan에서 프레임을 렌더링하는 것은 다음과 같은 공통 단계로 구성됩니다.
             // 1) 이전 프레임이 완료될 때까지 기다립니다.
             // 2) 스왑 체인에서 이미지를 획득합니다.
-            // 3) 해당 이미지에 장면을 그리는 명령 버퍼를 기록합니다.
-            // 4) 기록된 명령 버퍼를 제출합니다.
+            // 3) 해당 이미지에 장면을 그리는 커맨드 버퍼를 기록합니다.
+            // 4) 기록된 커맨드 버퍼를 제출합니다.
             // 5) 스왑 체인 이미지를 제시합니다.
             // 이후 장에서 그리기 기능을 확장할 것이지만 지금은 이것이 렌더 루프의 핵심입니다.
             drawFrame();
@@ -1539,9 +1628,9 @@ private:
         // 계속 진행하기 전에 디자인에 약간의 문제가 있습니다. 첫 번째 프레임에서 우리는 inFlightFence가 신호를 받을 때까지 즉시 대기하는 drawFrame()을 호출합니다. inFlightFence는 프레임 렌더링이 완료된 후에만 신호를 보내지만 이것이 첫 번째 프레임이기 때문에 펜스에 신호를 보낼 이전 프레임이 없습니다! 따라서 vkWaitForFences()는 절대 일어나지 않을 일을 기다리며 무기한 차단합니다. 이 딜레마에 대한 많은 솔루션 중에서 API에 내장된 영리한 해결 방법이 있습니다. vkwaitForFences()에 대한 첫 번째 호출이 펜스가 이미 신호를 받았던 것처럼 즉시 반환되도록 신호된 상태에서 펜스를 생성합니다. 이를 위해 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다. 이를 위해 위에 만들었던 createSyncObjects() 함수 내 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다.
         
         // 커맨드 버퍼에 기록하기
-        // 사용할 스왑 체인 이미지를 지정하는 imageIndex를 사용하여 이제 명령 버퍼를 기록할 수 있습니다. 먼저 명령 버퍼에서 vkResetCommandBuffer를 호출하여 기록할 수 있는지 확인합니다. vkResetCommandBuffer의 두 번째 매개변수는 VkCommandBufferResetFlagBits 플래그입니다. 특별한 것을 하고 싶지 않기 때문에 0으로 둡니다.
+        // 사용할 스왑 체인 이미지를 지정하는 imageIndex를 사용하여 이제 커맨드 버퍼를 기록할 수 있습니다. 먼저 커맨드 버퍼에서 vkResetCommandBuffer를 호출하여 기록할 수 있는지 확인합니다. vkResetCommandBuffer의 두 번째 매개변수는 VkCommandBufferResetFlagBits 플래그입니다. 특별한 것을 하고 싶지 않기 때문에 0으로 둡니다.
         vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
-        // 이제 우리가 원하는 명령을 기록하기 위해 함수 recordCommandBuffer를 호출합니다. 완전히 기록된 명령 버퍼를 사용하여 이제 제출할 수 있습니다.
+        // 이제 우리가 원하는 명령을 기록하기 위해 함수 recordCommandBuffer를 호출합니다. 완전히 기록된 커맨드 버퍼를 사용하여 이제 제출할 수 있습니다.
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
         // 커맨드 버퍼를 그래픽카드에 제출하기
@@ -1554,16 +1643,16 @@ private:
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
 
-        // 다음 두 매개변수는 실제로 실행을 위해 제출할 명령 버퍼를 지정합니다. 가지고 있는 단일 명령 버퍼를 제출하기만 하면 됩니다.
+        // 다음 두 매개변수는 실제로 실행을 위해 제출할 커맨드 버퍼를 지정합니다. 가지고 있는 단일 커맨드 버퍼를 제출하기만 하면 됩니다.
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
-        // signalSemaphoreCount 및 pSignalSemaphores 매개변수는 명령 버퍼가 실행을 완료한 후 신호를 보낼 세마포어를 지정합니다. 우리의 경우에는 그 목적을 위해 renderFinishedSemaphore를 사용하고 있습니다.
+        // signalSemaphoreCount 및 pSignalSemaphores 매개변수는 커맨드 버퍼가 실행을 완료한 후 신호를 보낼 세마포어를 지정합니다. 우리의 경우에는 그 목적을 위해 renderFinishedSemaphore를 사용하고 있습니다.
         VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        // 이제 vkQueueSubmit을 사용하여 그래픽 대기열에 명령 버퍼를 제출할 수 있습니다. 이 함수는 워크로드가 훨씬 더 클 때 효율성을 위해 인수로 VkSubmitInfo 구조의 배열을 사용합니다. 마지막 매개변수는 명령 버퍼가 실행을 완료할 때 신호를 보낼 선택적 펜스를 참조합니다. 이를 통해 언제 명령 버퍼를 재사용해도 안전한지 알 수 있으므로 inFlightFence에 제공하고자 합니다. 이제 다음 프레임에서 CPU는 새 명령을 기록하기 전에 이 명령 버퍼의 실행이 완료될 때까지 기다립니다.
+        // 이제 vkQueueSubmit을 사용하여 그래픽 대기열에 커맨드 버퍼를 제출할 수 있습니다. 이 함수는 워크로드가 훨씬 더 클 때 효율성을 위해 인수로 VkSubmitInfo 구조의 배열을 사용합니다. 마지막 매개변수는 커맨드 버퍼가 실행을 완료할 때 신호를 보낼 선택적 펜스를 참조합니다. 이를 통해 언제 커맨드 버퍼를 재사용해도 안전한지 알 수 있으므로 inFlightFence에 제공하고자 합니다. 이제 다음 프레임에서 CPU는 새 명령을 기록하기 전에 이 커맨드 버퍼의 실행이 완료될 때까지 기다립니다.
         if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to submit draw command buffer!");
@@ -1573,7 +1662,7 @@ private:
         // 프레임 그리기의 마지막 단계는 결과를 스왑 체인에 다시 제출하여 결국 화면에 표시되도록 하는 것입니다.
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        // 처음 두 매개변수는 VkSubmitInfo처럼 프레젠테이션이 일어나기 전에 대기할 세마포어를 지정합니다. 명령 버퍼에서 실행이 완료되기를 기다리고 삼각형이 그려지기를 원하기 때문에 신호를 받을 세마포어를 가져와서 기다립니다. 따라서 signalSemaphores를 사용합니다.
+        // 처음 두 매개변수는 VkSubmitInfo처럼 프레젠테이션이 일어나기 전에 대기할 세마포어를 지정합니다. 커맨드 버퍼에서 실행이 완료되기를 기다리고 삼각형이 그려지기를 원하기 때문에 신호를 받을 세마포어를 가져와서 기다립니다. 따라서 signalSemaphores를 사용합니다.
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = signalSemaphores;
         // 다음 두 매개변수는 이미지를 표시할 스왑 체인과 각 스왑 체인에 대한 이미지 인덱스를 지정합니다. 이것은 거의 항상 하나입니다.
@@ -1584,7 +1673,7 @@ private:
         // pResults라는 마지막 선택적 매개변수가 하나 있습니다.프레젠테이션이 성공적인 경우 모든 개별 스왑 체인을 확인하기 위해 VkResult 값의 배열을 지정할 수 있습니다. 현재 함수의 반환 값을 간단히 사용할 수 있기 때문에 단일 스왑 체인만 사용하는 경우에는 필요하지 않습니다.
         presentInfo.pResults = nullptr; // Optional
 
-        // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 명령 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
+        // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 커맨드 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
         // 많은 드라이버와 플랫폼이 창 크기 조정 후 VK_ERROR_OUT_OF_DATE_KHR을 자동으로 트리거하지만 항상 발생한다고 보장할 수 없습니다. 때문에 프레임 버퍼 크기 조정을 직접 감지하도록 framebufferResized 를 만들어 사용하였습니다.
@@ -1603,7 +1692,6 @@ private:
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         // 이제 대기열에 추가된 작업 프레임이 MAX_FRAMES_IN_FLIGHT개 이하이고 이러한 프레임이 서로 겹치지 않도록 필요한 모든 동기화를 구현했습니다. 최종 정리와 같은 코드의 다른 부분은 vkDeviceWaitIdle과 같은 더 거친 동기화에 의존하는 것이 좋습니다. 성능 요구 사항에 따라 사용할 접근 방식을 결정해야 합니다. 예제를 통해 동기화에 대해 자세히 알아보려면 Khronos 에서 제공하는 코드를 살펴보세요. - https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples#swapchain-image-acquire-and-present
     }
-
 
     // 스왑 체인을 다시 설정합니다.
     HELPER_FUNCTION void recreateSwapChain()
@@ -1634,6 +1722,81 @@ private:
         createFramebuffers();
     }
 
+    // 커맨드 버퍼를 기록하도록 해주는 함수입니다.
+    HELPER_FUNCTION void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+    {
+        // 이제 실행하려는 명령을 커맨드 버퍼에 기록하는 recordCommandBuffer 함수 작업을 시작합니다. 사용된 VkCommandBuffer는 쓰기를 원하는 현재 스왑체인 이미지의 인덱스를 인자로 받습니다.
+
+        // 버퍼 기록을 하기 위한 속성값들을 설정합니다.
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        // flags 매개변수는 커맨드 버퍼를 사용하는 방법을 지정합니다. 다음 값을 사용할 수 있습니다.
+        // VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : 커맨드 버퍼는 한 번 실행한 직후에 다시 기록됩니다.
+        // VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT : 이것은 단일 렌더 패스 내에 완전히 포함될 보조 커맨드 버퍼입니다.
+        // VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : 커맨드 버퍼가 이미 실행 보류 중인 동안 다시 제출할 수 있습니다.
+        // 이 플래그 중 어느 것도 현재 우리에게 적용되지 않습니다.
+        beginInfo.flags = 0; // Optional
+        // pInheritanceInfo 매개변수는 보조 커맨드 버퍼에만 관련됩니다. 호출하는 주요 커맨드 버퍼에서 상속할 상태를 지정합니다.
+        beginInfo.pInheritanceInfo = nullptr; // Optional
+
+        // vkBeginCommandBuffer를 호출하여 커맨드 버퍼 기록을 시작합니다.
+        // 커맨드 버퍼가 이미 한 번 기록된 경우 vkBeginCommandBuffer를 호출하면 암시적으로 재설정됩니다. 재설정 된 후에는 이전 버퍼에 명령을 추가할 수 없습니다.
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to begin recording command buffer!");
+        }
+
+        // 그리기는 vkCmdBeginRenderPass로 렌더 패스를 시작하는 것으로 그리기는 시작됩니다. 렌더 패스는 VkRenderPassBeginInfo 구조체의 일부 매개변수를 사용하여 구성됩니다.
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        // 첫 번째 매개변수는 렌더 패스 자체와 바인딩할 어태치먼트 입니다. 색상 어태치먼트로 지정된 각각의 스왑 체인 이미지에 대해 프레임 버퍼를 만들었습니다. 따라서 그리려는 스왑체인 이미지에 대한 프레임 버퍼를 바인딩해야 합니다. 전달된 imageIndex 매개변수를 사용하여 현재 스왑체인 이미지에 적합한 프레임 버퍼를 선택할 수 있습니다.
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+        // 다음 두 매개변수는 렌더 영역의 크기를 정의합니다. 렌더 영역은 셰이더 로드 및 저장이 수행되는 위치를 정의합니다. 이 영역 밖의 픽셀에는 정의되지 않은 값이 있습니다. 최상의 성능을 위해 첨부 파일의 크기와 일치해야 합니다.
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = swapChainExtent;
+        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 첨부에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다.
+        VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearColor;
+
+        // 이제 렌더 패스를 시작할 수 있습니다. 명령을 기록하는 모든 기능은 vkCmd 접두사로 시작합니다. 모두 void를 반환하므로 기록을 마칠 때까지 오류 처리가 없습니다.
+        // 모든 명령의 첫 번째 매개변수는 항상 명령을 기록할 커맨드 버퍼입니다. 두 번째 매개변수는 방금 제공한 렌더 패스의 세부 정보를 지정합니다. 최종 매개변수는 렌더 패스 내에서 그리기 명령이 제공되는 방식을 제어합니다. 다음 두 값 중 하나를 가질 수 있습니다.
+        // VK_SUBPASS_CONTENTS_INLINE: 렌더 패스 명령은 기본 커맨드 버퍼 자체에 포함되며 보조 커맨드 버퍼는 실행되지 않습니다.
+        // VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS : 렌더 패스 명령은 보조 커맨드 버퍼에서 실행됩니다.
+        // 보조 커맨드 버퍼를 사용하지 않을 것이므로 첫 번째 옵션을 사용하겠습니다.
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // 이제 그래픽 파이프라인을 바인딩할 수 있습니다.
+        // 두 번째 매개변수는 파이프라인 개체가 그래픽 또는 컴퓨팅 파이프라인인지 지정합니다. 이제 Vulkan에 그래픽 파이프라인에서 실행할 작업과 프래그먼트 셰이더에서 사용할 첨부 파일을 지정했으므로 남은 것은 삼각형을 그리도록 지시하는 것뿐입니다.
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+
+        // 이제 렌더링 작업 동안 정점 버퍼를 바인딩 하면 됩니다.
+        VkBuffer vertexBuffers[] = { vertexBuffer };
+        VkDeviceSize offsets[] = { 0 };
+        // vkCmdBindVertexBuffers 함수는 이전 장에서 설정한 것과 같이 정점 버퍼를 바인딩에 바인딩하는 데 사용됩니다. 명령 버퍼 외에 처음 두 매개변수는 정점 버퍼를 지정할 오프셋과 바인딩 수를 지정합니다. 마지막 두 매개변수는 바인딩할 정점 버퍼의 배열과 정점 데이터 읽기를 시작할 바이트 오프셋을 지정합니다.
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+        // 또한 vkCmdDraw에 대한 호출을 변경하여 하드코딩된 숫자 3이 아닌 버퍼의 정점 수를 전달해야 합니다.
+        // 실제 vkCmdDraw 함수는 약간 빈약해 보이지만 우리가 이미 설정했던 많은 정보들 때문에 매우 간단하게 구성됩니다. 커맨드 버퍼를 제외하고 다음 매개변수가 있습니다.
+        // vertexCount: 정점 버퍼가 없더라도 기술적으로 여전히 그릴 정점이 3개 있습니다. (셰이더 코드에)
+        // instanceCount: 인스턴스 렌더링에 사용되며, 그렇게 하지 않는 경우 1을 사용합니다.
+        // firstVertex : 정점 버퍼에 대한 오프셋으로 사용되며 gl_VertexIndex의 가장 낮은 값을 정의합니다.
+        // firstInstance : 인스턴스 렌더링의 오프셋으로 사용되며 gl_InstanceIndex의 가장 낮은 값을 정의합니다.
+        vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+
+
+        // 이제 렌더 패스를 종료할 수 있습니다.
+        vkCmdEndRenderPass(commandBuffer);
+
+        // 그리고 이제 커맨드 버퍼 기록을 마쳤습니다.
+        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to record command buffer!");
+        }
+    }
+
 
 
     // 4. 프로그램 종료
@@ -1641,6 +1804,10 @@ private:
     {
         // 스왑 체인을 다시 만들기 위해 이전 버전을 정리합니다.
         cleanupSwapChain();
+
+        // 물론 C++의 동적 메모리 할당과 마찬가지로 메모리는 어느 시점에선 해제되어야 합니다. 버퍼 객체에 묶인 메모리는 버퍼가 더 이상 사용되지 않으면 해제될 수 있으므로 버퍼가 파괴된 후에 해제하도록 합니다. 버퍼는 프로그램이 끝날 때까지 명령을 렌더링하는 데 사용할 수 있어야 하며 스왑 체인에 의존하지 않으므로 cleanup()에서 정리 하였습니다.
+        vkDestroyBuffer(device, vertexBuffer, nullptr);
+        vkFreeMemory(device, vertexBufferMemory, nullptr);
 
         // 세마포어와 펜스는 모든 명령이 완료되고 더 이상 동기화가 필요하지 않을 때 프로그램 끝에서 정리해야 합니다.
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -1706,7 +1873,6 @@ private:
         // 스왑 체인 개체를 지웁니다.
         vkDestroySwapchainKHR(device, swapChain, nullptr);
     }
-
 };
 
 
