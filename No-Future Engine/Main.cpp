@@ -1408,7 +1408,7 @@ private:
         // 명령 풀을 생성합니다. 특별한 매개변수가 없습니다.
         if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
         {
-            throw std::runtime_error("Failed to create command pool!");
+            throw std::runtime_error("Failed to create graphics command pool!");
         }
     }
 
@@ -1418,22 +1418,62 @@ private:
     // Vulkan의 버퍼는 그래픽 카드에서 읽을 수 있는 임의의 데이터를 저장하는 데 사용되는 메모리 영역입니다. 그것들은 버텍스 데이터를 저장하는 데 사용할 수 있으며, 물론 다른 많은 목적으로도 사용할 수 있습니다. 지금까지 다루었던 Vulkan 객체들과 달리 버퍼는 자동으로 메모리를 할당하지 않습니다. Vulkan API는 프로그래머가 거의 모든 것을 제어할 수 있도록 던져주며 메모리 관리는 그 중에 하나입니다.
     inline void createVertexBuffer()
     {
+        // 버퍼의 크기를 바이트 단위로 지정하는 크기입니다. 버텍스 데이터의 바이트 크기를 계산하는 것은 sizeof를 사용하면 간단합니다.
+        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+        // 2-11-1.
+        // 
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+
+        // 2-11-2.
+        // 이제 버텍스 데이터를 버퍼에 복사할 차례입니다. 이것은 vkMapMemory를 사용하여 버퍼 메모리를 CPU 액세스 가능한 메모리에 매핑하여 수행됩니다. 이 함수를 사용하면 오프셋과 크기로 정의된 지정된 메모리 리소스 영역에 액세스할 수 있습니다. 여기서 오프셋과 크기는 각각 0과 bufferInfo.size입니다. 모든 메모리를 매핑하기 위해 특수 값 VK_WHOLE_SIZE를 지정할 수도 있습니다. 마지막에서 두 번째 매개변수는 플래그를 지정하는 데 사용할 수 있지만 현재 API에서는 아직 사용할 수 없습니다. 값을 0으로 설정해야 합니다. 마지막 매개변수는 매핑된 메모리에 대한 포인터의 출력을 지정합니다.
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        // 이제 정점 데이터를 매핑된 메모리에 memcpy하고 vkUnmapMemory를 사용하여 다시 매핑 해제할 수 있습니다. 불행히도 드라이버는 예를 들어 캐싱 때문에 버퍼 메모리에 데이터를 즉시 복사하지 않을 수 있습니다. 버퍼에 대한 쓰기가 아직 매핑된 메모리에 표시되지 않을 수도 있습니다.
+        // 해당 문제를 처리하는 두 가지 방법이 있습니다.
+        // 1. VK_MEMORY_PROPERTY_HOST_COHERENT_BIT로 표시된 호스트 일관성 있는 메모리 힙 사용
+        // 2. 매핑된 메모리에 쓴 후 vkFlushMappedMemoryRanges를 호출하고 매핑된 메모리에서 읽기 전에 vkInvalidateMappedMemoryRanges를 호출
+        // 매핑된 메모리가 항상 할당된 메모리의 내용과 일치하도록 하는 첫 번째 접근 방식을 사용했습니다. 이것은 명시적 플러시보다 성능이 약간 더 나빠질 수 있음을 명심하십시오. 그러나 이것이 중요하지 않은 이유는 다음 장에서 살펴보겠습니다.
+        memcpy(data, vertices.data(), (size_t)bufferSize);
+        // 메모리 범위를 플러시하거나 일관된 메모리 힙을 사용한다는 것은 드라이버가 버퍼에 대한 쓰기를 인식한다는 것을 의미하지만 아직 GPU에서 실제로 볼 수 있다는 의미는 아닙니다. GPU로의 데이터 전송은 백그라운드에서 발생하는 작업이며 사양은 단순히 vkQueueSubmit에 대한 다음 호출 시점에서 완료가 보장된다고 알려줍니다.
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        // 버텍스 버퍼를 생성하기 위해 실제로 버퍼를 생성하는 헬퍼 함수를 호출합니다.
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+
+
+        // 2-11-3.
+        // 
+        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+
+    }
+
+    // 버퍼를 생성하여 메모리를 할당하는 공통 함수
+    HELPER_FUNCTION void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
+    {
         // 버퍼를 생성하려면 VkBufferCreateInfo 구조체를 채워야 합니다.
         VkBufferCreateInfo bufferInfo{};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         // 구조체의 첫 번째 필드는 버퍼의 크기를 바이트 단위로 지정하는 크기입니다. 버텍스 데이터의 바이트 크기를 계산하는 것은 sizeof를 사용하면 간단합니다.
-        bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+        bufferInfo.size = size;
         // 두 번째 필드는 버퍼의 데이터가 어떤 용도로 사용될 것인지를 나타내는 사용량입니다. 비트 연산인 |(OR) 를 사용하여 여러 목적을 지정할 수 있습니다. 우리의 사용 사례는 버텍스 버퍼가 될 것이며, 향후 장에서 다른 유형의 사용을 살펴볼 것입니다.
-        bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        bufferInfo.usage = usage;
         // 스왑 체인의 이미지와 마찬가지로 버퍼는 특정 큐 패밀리가 소유하거나 여러 큐에서 동시에 공유할 수도 있습니다. 버퍼는 그래픽스 큐에서만 사용되므로 독점 액세스를 유지 하겠습니다.
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         // flags 매개변수는 현재 관련이 없는 희소(sparse) 버퍼 메모리를 구성하는 데 사용됩니다. 기본값 0으로 두겠습니다.
         //bufferInfo.flags = 0;
 
         // 이제 vkCreateBuffer로 버퍼를 생성할 수 있습니다.버퍼 핸들을 보유하고 vertexBuffer라고 부르는 클래스 멤버를 정의하십시오.
-        if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS)
+        if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
         {
-            throw std::runtime_error("Failed to create vertex buffer!");
+            throw std::runtime_error("Failed to create buffer!");
         }
 
         // 버퍼가 생성되었지만 실제로 아직 할당된 메모리가 없습니다. 버퍼에 메모리를 할당하는 첫 번째 단계는 적절하게 명명된 vkGetBufferMemoryRequirements 함수를 사용하여 메모리 요구 사항을 설정하는 것입니다.
@@ -1442,35 +1482,58 @@ private:
         // alignment        : 할당된 메모리 영역에서 버퍼가 시작되는 오프셋(바이트)은 bufferInfo.usage 및 bufferInfo.flags에 따라 다릅니다.
         // memoryTypeBits   : 버퍼에 적합한 메모리 유형의 비트 필드입니다.
         VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
+        vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
 
         // 이제 findMemoryType 를 통해 그래픽카드가 해당 메모리 타입을 지원하는지 확인하여 VkMemoryAllocateInfo 구조를 채워 메모리를 실제로 할당할 수 있습니다.
         VkMemoryAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
         // 메모리 할당은 이제 정점 버퍼의 메모리 요구 사항과 원하는 속성에서 파생된 크기와 유형을 지정하는 것 만큼 간단합니다. 클래스 멤버를 만들어 핸들을 저장하고 vkAllocateMemory 로 메모리를 할당합니다.
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS)
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
         {
-            throw std::runtime_error("Failed to allocate vertex buffer memory!");
+            throw std::runtime_error("Failed to allocate buffer memory!");
         }
 
         // 메모리 할당이 성공했다면 이제 vkBindBufferMemory를 사용하여 이 메모리를 버퍼와 연결할 수 있습니다.
         // 네 번째 매개변수는 메모리 영역 내의 오프셋입니다. 이 메모리는 이 버텍스 버퍼를 위해 특별히 할당되었기 때문에 오프셋은 단순히 0입니다. 오프셋이 0이 아닌 경우 memRequirements.alignment로 나눌 수 있어야 합니다.
-        vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+        vkBindBufferMemory(device, buffer, bufferMemory, 0);
+    }
 
-        // 이제 정점 데이터를 버퍼에 복사할 차례입니다. 이것은 vkMapMemory를 사용하여 버퍼 메모리를 CPU 액세스 가능한 메모리에 매핑하여 수행됩니다. 이 함수를 사용하면 오프셋과 크기로 정의된 지정된 메모리 리소스 영역에 액세스할 수 있습니다. 여기서 오프셋과 크기는 각각 0과 bufferInfo.size입니다. 모든 메모리를 매핑하기 위해 특수 값 VK_WHOLE_SIZE를 지정할 수도 있습니다. 마지막에서 두 번째 매개변수는 플래그를 지정하는 데 사용할 수 있지만 현재 API에서는 아직 사용할 수 없습니다. 값을 0으로 설정해야 합니다. 마지막 매개변수는 매핑된 메모리에 대한 포인터의 출력을 지정합니다.
-        void* data;
-        vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-        // 이제 정점 데이터를 매핑된 메모리에 memcpy하고 vkUnmapMemory를 사용하여 다시 매핑 해제할 수 있습니다. 불행히도 드라이버는 예를 들어 캐싱 때문에 버퍼 메모리에 데이터를 즉시 복사하지 않을 수 있습니다. 버퍼에 대한 쓰기가 아직 매핑된 메모리에 표시되지 않을 수도 있습니다.
-        // 해당 문제를 처리하는 두 가지 방법이 있습니다.
-        // 1. VK_MEMORY_PROPERTY_HOST_COHERENT_BIT로 표시된 호스트 일관성 있는 메모리 힙 사용
-        // 2. 매핑된 메모리에 쓴 후 vkFlushMappedMemoryRanges를 호출하고 매핑된 메모리에서 읽기 전에 vkInvalidateMappedMemoryRanges를 호출
-        // 매핑된 메모리가 항상 할당된 메모리의 내용과 일치하도록 하는 첫 번째 접근 방식을 사용했습니다. 이것은 명시적 플러시보다 성능이 약간 더 나빠질 수 있음을 명심하십시오. 그러나 이것이 중요하지 않은 이유는 다음 장에서 살펴보겠습니다.
-        memcpy(data, vertices.data(), (size_t)bufferInfo.size);
-        // 메모리 범위를 플러시하거나 일관된 메모리 힙을 사용한다는 것은 드라이버가 버퍼에 대한 쓰기를 인식한다는 것을 의미하지만 아직 GPU에서 실제로 볼 수 있다는 의미는 아닙니다. GPU로의 데이터 전송은 백그라운드에서 발생하는 작업이며 사양은 단순히 vkQueueSubmit에 대한 다음 호출 시점에서 완료가 보장된다고 알려줍니다.
-        vkUnmapMemory(device, vertexBufferMemory);
+    // 
+    HELPER_FUNCTION void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
+    {
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = commandPool;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer commandBuffer;
+        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+        VkBufferCopy copyRegion{};
+        copyRegion.size = size;
+        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+        vkEndCommandBuffer(commandBuffer);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(graphicsQueue);
+
+        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
     // 그래픽 카드는 할당할 다양한 유형의 메모리를 제공할 수 있습니다. 각 메모리 유형은 허용되는 작업 및 성능 특성 측면에서 다릅니다. 사용할 올바른 유형의 메모리를 찾으려면 버퍼의 요구 사항과 자체 응용 프로그램 요구 사항을 결합해야 합니다.이를 위해 새로운 함수 findMemoryType을 생성해 보겠습니다.
