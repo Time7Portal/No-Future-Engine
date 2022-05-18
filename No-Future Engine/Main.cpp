@@ -611,7 +611,7 @@ private:
         // queueFamily 에는 각각의 큐 페밀리에 대한 정보가 담겨있습니다. queueFamily 를 전부 탐색해서 우리가 원하는 큐 페밀리가 있는지 확인합니다.
         for (const auto& queueFamily : queueFamilies)
         {
-            // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다.
+            // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다. 좋은 소식으로써 VK_QUEUE_GRAPHICS_BIT 또는 VK_QUEUE_COMPUTE_BIT 기능이 있는 모든 대기열 제품군은 암시적으로 VK_QUEUE_TRANSFER_BIT 작업을 지원하므로 따로 검사할 필요가 없습니다.
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
             {
                 indices.graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
@@ -1422,7 +1422,7 @@ private:
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
         // 2-11-1.
-        // 
+        // 현재 가지고 있는 버텍스 버퍼는 올바르게 작동하지만 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 읽을 수 있는 최적의 메모리 유형이 아닐 수 있습니다. 가장 최적의 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
