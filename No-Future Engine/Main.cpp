@@ -25,7 +25,7 @@ constexpr bool enableValidationLayers = false;
 constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검증 레이어 활성화
 #endif
 
-// 코드 가독성을 위해 핼퍼 함수 표시용
+// 코드 가독성을 위한 핼퍼 함수 표시용
 #define HELPER_FUNCTION inline
 
 // 초기 윈도우 해상도 설정
@@ -611,7 +611,15 @@ private:
         // queueFamily 에는 각각의 큐 페밀리에 대한 정보가 담겨있습니다. queueFamily 를 전부 탐색해서 우리가 원하는 큐 페밀리가 있는지 확인합니다.
         for (const auto& queueFamily : queueFamilies)
         {
-            // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다. 좋은 소식으로써 VK_QUEUE_GRAPHICS_BIT 또는 VK_QUEUE_COMPUTE_BIT 기능이 있는 모든 대기열 제품군은 암시적으로 VK_QUEUE_TRANSFER_BIT 작업을 지원하므로 따로 검사할 필요가 없습니다.
+            // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다. 
+            // ## Staging buffer : 좋은 소식으로써 VK_QUEUE_GRAPHICS_BIT 또는 VK_QUEUE_COMPUTE_BIT 기능이 있는 모든 대기열 제품군은 암시적으로 VK_QUEUE_TRANSFER_BIT 작업을 지원하므로 따로 검사할 필요가 없습니다. (VK_QUEUE_TRANSFER_BIT 는 CPU 스테이징 버퍼에서 GPU 로컬 메모리로 데이터를 전송하기 위해 필요합니다.)
+            // 도전을 하고 싶으시다면, 전송 작업에 대해 VK_QUEUE_GRAPHICS_BIT 가 아닌 다른 큐 패밀리를 사용하려고 시도할 수 있습니다. 이때는 프로그램을 다음과 같이 수정해야 합니다.
+            // 1. VK_QUEUE_TRANSFER_BIT 비트가 있지만, VK_QUEUE_GRAPHICS_BIT 가 없는 (독점적으로 VK_QUEUE_TRANSFER_BIT 만 지원하는) 큐 패밀리를 명시적으로 찾도록 QueueFamilyIndices 및 findQueueFamilies를 수정합니다.
+            // 2. createLogicalDevice를 수정하여 전송 큐에 대한 핸들을 요청합니다.
+            // 3. 전송 큐 패밀리에 제출할 명령 버퍼들을 위해 독점적인 두 번째 명령 풀을 만듭니다.
+            // 4. 리소스의 sharingMode를 VK_SHARING_MODE_CONCURRENT로 변경하고 그래픽 및 전송 대기열 패밀리를 모두 지정합니다.
+            // 5. vkCmdCopyBuffer(이 장에서 사용할)와 같은 전송 명령을 그래픽 대기열 대신 전송 대기열에 제출합니다.
+            // 약간의 작업이지만 대기열 패밀리 간에 리소스를 공유하는 방법에 대해 많은 것을 배울 수 있습니다.
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
             {
                 indices.graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
@@ -1423,9 +1431,14 @@ private:
 
         // 2-11-1.
         // 현재 가지고 있는 버텍스 버퍼는 올바르게 작동하지만 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 읽을 수 있는 최적의 메모리 유형이 아닐 수 있습니다. 가장 최적의 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
+        // 이제 버텍스 데이터를 매핑하고 복사하기 위해 새로운 stagingBufferMemory 와 함께 stagingBuffer 를 사용하고 있습니다.
+        // 여기서 우리는 두 개의 새로운 버퍼 사용방식 플래그를 설정할 것입니다.
+        // VK_BUFFER_USAGE_TRANSFER_SRC_BIT: 버퍼는 메모리 전송 작업에서 소스로 사용될 수 있습니다.
+        // VK_BUFFER_USAGE_TRANSFER_DST_BIT: 버퍼는 메모리 전송 작업에서 대상(목적지)으로 사용될 수 있습니다.
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        // vertexBuffer는 이제 장치 로컬인 메모리 유형에서 할당됩니다. 이는 일반적으로 vkMapMemory를 사용할 수 없음을 의미합니다. 그러나 stagingBuffer에서는 vertexBuffer로 데이터를 복사할 수 있습니다. 정점 버퍼 사용 플래그와 함께 stagingBuffer에 대한 전송 소스 플래그와 vertexBuffer에 대한 전송 대상(목적지) 플래그를 지정하여 그렇게 할 것임을 나타내야 합니다.
 
 
         // 2-11-2.
@@ -1446,16 +1459,17 @@ private:
 
 
         // 2-11-3.
-        // 
+        // 이제 copyBuffer라고 하는 한 버퍼에서 다른 버퍼로 내용을 복사하는 함수를 작성할 것입니다.
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
+        // 스테이징 버퍼는 장치 버퍼로 데이터를 한번만 복사하고는 더 이상 사용하지 않을 것이므로 깔끔히 지웁니다.
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-
+        // 프로그램을 실행하여 익숙한 삼각형이 다시 표시되는지 확인합니다. 지금은 개선 사항이 보이지 않을 수 있지만 정점 데이터는 이제 고성능 메모리에서 로드됩니다. 이것은 더 복잡한 지오메트리 렌더링을 시작할 때 중요합니다. 실제 응용 프로그램에서는 모든 개별 버퍼에 대해 실제로 vkAllocateMemory를 호출해서는 안 됩니다. 최대 동시 메모리 할당 수는 maxMemoryAllocationCount 물리적 장치 제한에 의해 제한되며 NVIDIA GTX 1080과 같은 고급 하드웨어에서도 4096만큼 낮을 수 있습니다. 동시에 많은 수의 오브젝트 렌더링을 위해 메모리를 할당하는 올바른 방법은 오프셋 매개변수를 사용하여 단일 할당을 여러 오브젝트로 분할하는 사용자 지정 할당자(allocator)를 만드는 것입니다. 이러한 할당자를 본인이 직접 구현하거나 GPUOpen initiative에서 제공하는 VulkanMemoryAllocator 라이브러리를 사용할 수도 있습니다. 그러나 이 자습서에서는 모든 리소스에 대해 별도의 버퍼 할당을 사용해도 괜찮습니다. 지금은 이러한 한계에 거의 도달하지 않을 것이기 때문입니다.
     }
 
-    // 버퍼를 생성하여 메모리를 할당하는 공통 함수
+    // 다양한 버퍼를 생성하여 메모리를 할당할때 공통적으로 사용될 함수
     HELPER_FUNCTION void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
     {
         // 버퍼를 생성하려면 VkBufferCreateInfo 구조체를 채워야 합니다.
@@ -1501,9 +1515,10 @@ private:
         vkBindBufferMemory(device, buffer, bufferMemory, 0);
     }
 
-    // 
+    // 한 버퍼에서 다른 버퍼로 내용을 복사하는 함수
     HELPER_FUNCTION void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     {
+        // 메모리 전송 작업은 그리기 명령과 마찬가지로 명령 버퍼를 사용하여 실행됩니다. 따라서 반드시 먼저 임시 명령 버퍼를 먼저 할당해야 합니다. 또한 이러한 임시 명령 버퍼들을 위해 별도의 커맨드 풀을 만드는 것도 좋습니다. 이러한 구현이 메모리 할당 최적화를 적용할 수 있기 때문입니다. 이 경우 명령 풀 생성에 VK_COMMAND_POOL_CREATE_TRANSIENT_BIT 플래그를 사용하는 것이 좋습니다.
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -1513,18 +1528,24 @@ private:
         VkCommandBuffer commandBuffer;
         vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
 
+        // 이제 바로 커멘드 버퍼에 명령 기록을 시작합니다. 명령 버퍼를 한 번만 사용하고 복사 작업 실행이 완료되고 함수에서 리턴할때까지 기다리도록 합니다. VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT를 사용하여 불칸 드라이버에게 그 의도를 알리는 것이 좋습니다.
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
+        // 버퍼의 내용은 vkCmdCopyBuffer 명령을 사용하여 전송됩니다. 소스 및 대상(목적지) 버퍼를 인수로 사용하고 복사할 영역 배열을 사용합니다. 영역은 VkBufferCopy 구조체에 정의되며 소스 버퍼 오프셋, 대상(목적지) 버퍼 오프셋 및 크기로 구성됩니다. vkMapMemory 명령과 달리 여기에선 copyRegion.size에 VK_WHOLE_SIZE를 지정할 수 없습니다.
         VkBufferCopy copyRegion{};
+        //copyRegion.srcOffset = 0; // Optional
+        //copyRegion.dstOffset = 0; // Optional
         copyRegion.size = size;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
+        // 이 명령 버퍼에는 복사 명령만 포함되어 있으므로 그 직후에 기록을 중지할 수 있습니다. 이제 명령 버퍼를 실행하여 전송을 완료합니다.
         vkEndCommandBuffer(commandBuffer);
 
+        // 그리기 명령과 달리 이번에는 기다려야 하는 이벤트가 없습니다. 우리는 버퍼에서 즉시 전송을 실행하기를 원합니다. 이 전송이 완료될 때까지 기다리는 두 가지 가능한 방법이 있습니다. 울타리를 사용하고 vkwaitForFences로 기다리거나 단순히 vkQueueWaitIdle로 전송 대기열이 유휴 상태가 될 때까지 기다릴 수 있습니다. 울타리를 사용하면 한 번에 하나씩 실행하는 대신 여러 전송을 동시에 예약하고 모두 완료될 때까지 기다릴 수 있습니다. 이는 불칸 드라이버에게 최적화할 수 있는 더 많은 기회를 제공할 수 있습니다.
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
@@ -1533,6 +1554,7 @@ private:
         vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(graphicsQueue);
 
+        // 전송 작업에 사용된 명령 버퍼를 정리하는 것을 잊지 마십시오.
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
