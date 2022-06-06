@@ -82,7 +82,9 @@ BUGFIX : 프로그램 종료시 클린업 과정에 스왑체인 관련 중복 �
 ### 2022-06-06 (현충일)
 
 Uniform buffer 를 사용할 수 있도록 Descriptor set(pool) 구성
+
 Uniform buffer 로 MVP 매트릭스 전달하여 셰이더에서 카메라 변환 수행
+
 3D 월드 내 오브젝트 회전 구현
 
 
