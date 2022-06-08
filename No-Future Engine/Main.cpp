@@ -1094,8 +1094,8 @@ private:
 
 
 
-    // 
-    void createDescriptorSetLayout()
+    // @@@@@@
+    inline void createDescriptorSetLayout()
     {
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
@@ -1558,7 +1558,7 @@ private:
 
 
     // @@@@@@@
-    void createUniformBuffers()
+    inline void createUniformBuffers()
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -1572,7 +1572,7 @@ private:
 
 
     // @@@@@@@
-    void createDescriptorPool()
+    inline void createDescriptorPool()
     {
         VkDescriptorPoolSize poolSize{};
         poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1592,7 +1592,7 @@ private:
 
 
     // @@@@@@@
-    void createDescriptorSets()
+    inline void createDescriptorSets()
     {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
