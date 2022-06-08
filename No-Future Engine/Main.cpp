@@ -4,11 +4,13 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // OpenGL과 다르게 0 ~ 1 스케일 깊이 값을 사용합니다.
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp> // 
 
 #include <iostream>         // 
 #include <fstream>          // 셰이더 소스를 읽기 위함
 #include <stdexcept>        // 예외처리
 #include <algorithm>        // std::clamp 사용
+#include <chrono>           // 
 #include <vector>           // 
 #include <cstring>          // strcmp 사용
 #include <cstdlib>          // EXIT_SUCCESS, EXIT_FAILURE 매크로
@@ -25,14 +27,14 @@ constexpr bool enableValidationLayers = false;
 constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검증 레이어 활성화
 #endif
 
-// 코드 가독성을 위해 핼퍼 함수 표시용
+// 코드 가독성을 위한 핼퍼 함수 표시용
 #define HELPER_FUNCTION inline
 
 // 초기 윈도우 해상도 설정
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
-// 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수 설정
+// 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
 // CPU가 GPU보다 너무 앞서는 것을 원하지 않기 때문에 숫자 2를 선택합니다. 2개의 프레임이 비행 중이면 CPU와 GPU가 동시에 자체 작업을 수행할 수 있습니다. CPU가 일찍 끝나면 GPU가 렌더링을 마칠 때까지 기다렸다가 추가 작업을 제출합니다. 3개 이상의 프레임이 비행 중이면 CPU가 GPU보다 앞서서 지연 프레임이 추가될 수 있습니다. 일반적으로 추가 대기 시간은 바람직하지 않습니다. 그러나 비행 중인 프레임 수에 대한 애플리케이션 제어 권한을 부여하는 것은 Vulkan이 명시적임을 보여주는 또 다른 예입니다. 그런 다음 여러 커맨드 버퍼를 만들어야 합니다. createCommandBuffer의 이름을 createCommandBuffers로 바꿉니다. 다음으로 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 크기로 조정하고 VkCommandBufferAllocateInfo를 변경하여 많은 커맨드 버퍼를 포함한 다음 대상을 커맨드 버퍼의 벡터로 변경해야 합니다.
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -114,15 +116,15 @@ struct Vertex
     // 첫 번째 구조는 VkVertexInputBindingDescription이며 올바른 데이터로 채우기 위해 Vertex 구조 정보를 반환하는 멤버 함수를 추가합니다.
     static VkVertexInputBindingDescription getBindingDescription()
     {
-        // 버텍스 바인딩 설명(VkVertexInputBindingDescription)은 버텍스 전체에 걸쳐 메모리에서 데이터를 로드하는 방법을 설명합니다. 데이터 항목 사이의 바이트 수와 각 정점 이후 또는 각 인스턴스 이후에 다음 데이터 항목으로 얼만큼 건너뛰며 이동할지 여부를 지정합니다.
-        // 모든 정점별 데이터는 하나의 배열에 함께 포장되므로 하나의 바인딩만 갖게 됩니다. 바인딩 매개변수는 바인딩 배열의 바인딩 인덱스를 지정합니다.
+        // 버텍스 바인딩 설명(VkVertexInputBindingDescription)은 버텍스 전체에 걸쳐 메모리에서 데이터를 로드하는 방법을 설명합니다. 데이터 항목 사이의 바이트 수와 각 버텍스 이후 또는 각 인스턴스 이후에 다음 데이터 항목으로 얼만큼 건너뛰며 이동할지 여부를 지정합니다.
+        // 모든 버텍스별 데이터는 하나의 배열에 함께 포장되므로 하나의 바인딩만 갖게 됩니다. 바인딩 매개변수는 바인딩 배열의 바인딩 인덱스를 지정합니다.
         VkVertexInputBindingDescription bindingDescription{};
         bindingDescription.binding = 0;
         // stride 매개변수는 한 항목에서 다음 항목까지의 바이트 수를 지정하고 inputRate 매개변수는 다음 값 중 하나를 가질 수 있습니다.
-        // VK_VERTEX_INPUT_RATE_VERTEX: 각 정점 뒤의 다음 데이터 항목으로 이동
+        // VK_VERTEX_INPUT_RATE_VERTEX: 각 버텍스 뒤의 다음 데이터 항목으로 이동
         // VK_VERTEX_INPUT_RATE_INSTANCE: 각 인스턴스 후 다음 데이터 항목으로 이동
         bindingDescription.stride = sizeof(Vertex);
-        // 인스턴스 렌더링을 사용하지 않을 것이므로 정점별 데이터를 사용하겠습니다.
+        // 인스턴스 렌더링을 사용하지 않을 것이므로 버텍스별 데이터를 사용하겠습니다.
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
         return bindingDescription;
@@ -161,14 +163,31 @@ struct Vertex
     }
 };
 
-const std::vector<Vertex> vertices = {
-    // GLM 은 사용하기 편하도록 셰이더 언어에서 사용되는 벡터 타입과 정확히 일치하는 C++ 타입을 제공합니다.
-    // interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상} }
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+
+// 
+struct UniformBufferObject
+{
+    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
 };
 
+
+// GLM 은 사용하기 편하도록 셰이더 언어에서 사용되는 벡터 타입과 정확히 일치하는 C++ 타입을 제공합니다.
+// interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상} }
+const std::vector<Vertex> vertices = {
+    // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다.
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
+
+// 직사각형을 그리기 위해 사용될 버텍스 순서입니다.
+const std::vector<uint16_t> indices = {
+    // 실제 응용 프로그램에서 렌더링할 3D 메시는 종종 여러 삼각형 내 버텍스들을 공유할 수 있습니다. 공유할 버텍스들의 순서를 ID 로 활용하여 (인덱싱) 아래처럼 사각형을 그리는 것과 같은 간단한 작업에서도 사용할 수 있습니다. 사각형을 그리기 위해선 2개의 삼각형을 겹쳐 그려야 하는데 이때 2개의 버텍스는 중복되어 사용될 것이므로 이를 ID 로 공유해 사용하면 효율적입니다. 인덱스 버퍼는 본질적으로 버텍스 버퍼에 대한 포인터의 배열입니다. 버텍스 데이터를 재정렬하고 여러 버텍스에 대해 기존 데이터를 재사용할 수 있습니다. https://vulkan-tutorial.com/Vertex_buffers/Index_buffer 링크의 그림은 4개의 고유한 버텍스 각각을 포함하는 버텍스 버퍼가 있는 경우 사각형에 대한 인덱스 버퍼의 모양을 보여줍니다. 처음 세 개의 인덱스는 오른쪽 위 삼각형을 정의하고 마지막 세 개의 인덱스는 왼쪽 아래 삼각형의 버텍스를 정의합니다. 버텍스의 항목 수에 따라 인덱스 버퍼에 uint16_t 또는 uint32_t를 사용할 수 있습니다. 65535개 미만의 고유 버텍스을 사용하고 있기 때문에 지금은 uint16_t를 고수할 수 있습니다.
+    0, 1, 2, 2, 3, 0
+};
 
 
 // 실제 어플리케이션 클래스
@@ -194,13 +213,23 @@ private:
     std::vector<VkFramebuffer> swapChainFramebuffers;   // 스왑 체인용 프레임 버퍼들의 핸들 모음
 
     VkRenderPass renderPass;                            // 렌더 패스 핸들
+    VkDescriptorSetLayout descriptorSetLayout;          // 
     VkPipelineLayout pipelineLayout;                    // 파이프라인 레이아웃 핸들
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
     
-    VkBuffer vertexBuffer;                              // 
-    VkDeviceMemory vertexBufferMemory;                  // 
+    VkBuffer vertexBuffer;                              // 버텍스 버퍼
+    VkDeviceMemory vertexBufferMemory;                  // 버텍스 버퍼가 들어있는 실제 메모리의 핸들
+    // 버텍스 데이터와 마찬가지로 GPU가 인덱스에 액세스할 수 있도록 인덱스를 VkBuffer에 업로드해야 합니다.인덱스 버퍼에 대한 리소스를 보유할 두 개의 새 클래스 멤버를 정의합니다.
+    VkBuffer indexBuffer;                               // 인덱스 버퍼
+    VkDeviceMemory indexBufferMemory;                   // 인덱스 버퍼가 들어있는 실제 메모리의 핸들
+
+    std::vector<VkBuffer> uniformBuffers;               // 
+    std::vector<VkDeviceMemory> uniformBuffersMemory;   // 
+
+    VkDescriptorPool descriptorPool;                    // 
+    std::vector<VkDescriptorSet> descriptorSets;        // 
 
     std::vector<VkCommandBuffer> commandBuffers;        // 커맨드 버퍼. 커맨드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 커맨드 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
 
@@ -271,32 +300,41 @@ private:
     // 2. 불칸 개체 초기화 및 렌더링 준비
     inline void initVulkan()
     {
-        createInstance();           // 2-1. Vulkan 개체 만들기
+        createInstance();               // 2-1. Vulkan 개체 만들기
 
-        createSurface();            // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
+        createSurface();                // 2-2. 화면 표시를 위한 서피스 생성 및 GLFW 윈도우에 연결
 
-        pickPhysicalDevice();       // 2-3. 그래픽 카드 선택
+        pickPhysicalDevice();           // 2-3. 그래픽 카드 선택
 
-        createLogicalDevice();      // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
+        createLogicalDevice();          // 2-4. 그래픽 카드와 통신하기 위한 인터페이스 생성
 
-        createSwapChain();          // 2-5. 이미지 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 생성
+        createSwapChain();              // 2-5. 이미지 버퍼를 어떤 방식으로 동기화하면서 화면에 표시할지 스왑 체인 규약과 스왑 체인용 이미지 생성
        
-        createImageViews();         // 2-6. 스왑 체인용 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
+        createImageViews();             // 2-6. 스왑 체인용 이미지 사용 방식을 정의하기 위한 이미지 뷰 생성
 
-        createRenderPass();         // 2-7. 렌더 패스 생성
+        createRenderPass();             // 2-7. 렌더 패스 생성
 
-        createGraphicsPipeline();   // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
+        createDescriptorSetLayout();    // 
 
-        createFramebuffers();       // 2-9. 프레임 버퍼들을 생성
+        createGraphicsPipeline();       // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
 
-        createCommandPool();        // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
+        createFramebuffers();           // 2-9. 프레임 버퍼들을 생성
 
-        createVertexBuffer();       // 2-11. 버텍스 버퍼 생성
+        createCommandPool();            // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createCommandBuffers();      // 2-12. 그래픽 카드로 보낼 커맨드 버퍼 생성
+        createVertexBuffer();           // 2-11. 버텍스 버퍼 생성
 
-        createSyncObjects();        // 2-13. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+        createIndexBuffer();            // 2-12. 인덱스 버퍼 생성
 
+        createUniformBuffers();         // 
+
+        createDescriptorPool();         // 
+
+        createDescriptorSets();         // 
+
+        createCommandBuffers();         // 2-13. 그래픽 카드로 보낼 커맨드 버퍼 생성
+
+        createSyncObjects();            // 2-14. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     }
 
 
@@ -611,7 +649,15 @@ private:
         // queueFamily 에는 각각의 큐 페밀리에 대한 정보가 담겨있습니다. queueFamily 를 전부 탐색해서 우리가 원하는 큐 페밀리가 있는지 확인합니다.
         for (const auto& queueFamily : queueFamilies)
         {
-            // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다. 좋은 소식으로써 VK_QUEUE_GRAPHICS_BIT 또는 VK_QUEUE_COMPUTE_BIT 기능이 있는 모든 대기열 제품군은 암시적으로 VK_QUEUE_TRANSFER_BIT 작업을 지원하므로 따로 검사할 필요가 없습니다.
+            // 지금은 그래픽 명령을 지원하는 큐 페밀리 VK_QUEUE_GRAPHICS_BIT 하나만 필요하지만 나중에는 더 추가될 수 있습니다. 
+            // ## Staging buffer : 좋은 소식으로써 VK_QUEUE_GRAPHICS_BIT 또는 VK_QUEUE_COMPUTE_BIT 기능이 있는 모든 대기열 제품군은 암시적으로 VK_QUEUE_TRANSFER_BIT 작업을 지원하므로 따로 검사할 필요가 없습니다. (VK_QUEUE_TRANSFER_BIT 는 CPU 스테이징 버퍼에서 GPU 로컬 메모리로 데이터를 전송하기 위해 필요합니다.)
+            // 도전을 하고 싶으시다면, 전송 작업에 대해 VK_QUEUE_GRAPHICS_BIT 가 아닌 다른 큐 패밀리를 사용하려고 시도할 수 있습니다. 이때는 프로그램을 다음과 같이 수정해야 합니다.
+            // 1. VK_QUEUE_TRANSFER_BIT 비트가 있지만, VK_QUEUE_GRAPHICS_BIT 가 없는 (독점적으로 VK_QUEUE_TRANSFER_BIT 만 지원하는) 큐 패밀리를 명시적으로 찾도록 QueueFamilyIndices 및 findQueueFamilies를 수정합니다.
+            // 2. createLogicalDevice를 수정하여 전송 큐에 대한 핸들을 요청합니다.
+            // 3. 전송 큐 패밀리에 제출할 명령 버퍼들을 위해 독점적인 두 번째 명령 풀을 만듭니다.
+            // 4. 리소스의 sharingMode를 VK_SHARING_MODE_CONCURRENT로 변경하고 그래픽 및 전송 대기열 패밀리를 모두 지정합니다.
+            // 5. vkCmdCopyBuffer(이 장에서 사용할)와 같은 전송 명령을 그래픽 대기열 대신 전송 대기열에 제출합니다.
+            // 약간의 작업이지만 대기열 패밀리 간에 리소스를 공유하는 방법에 대해 많은 것을 배울 수 있습니다.
             if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
             {
                 indices.graphicsFamily = i; // 값을 썼으므로 indices.isComplete() 했을때 true 가 반환 될것입니다.
@@ -1048,6 +1094,28 @@ private:
 
 
 
+    // 
+    void createDescriptorSetLayout()
+    {
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.pImmutableSamplers = nullptr;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &uboLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor set layout!");
+        }
+    }
+
+
+
     // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
     inline void createGraphicsPipeline()
     {
@@ -1092,10 +1160,10 @@ private:
         
         // 이전 세대 그래픽스 API 에서는 그래픽스 파이프라인의 대부분의 단계에 대해 기본 설정을 제공하지만, 불칸은 모든 것들을 직접 다 설정해야 합니다.
 
-        // 2-8-4. 버텍스 셰이더에 어떤 형식으로 버텍스 데이터를 집어넣을지 설정합니다. pVertexBindingDescriptions 및 pVertexAttributeDescriptions 멤버는 정점 데이터를 로드하기 위해 앞서 언급한 세부 정보를 설명하는 구조체 배열을 가리킵니다.
+        // 2-8-4. 버텍스 셰이더에 어떤 형식으로 버텍스 데이터를 집어넣을지 설정합니다. pVertexBindingDescriptions 및 pVertexAttributeDescriptions 멤버는 버텍스 데이터를 로드하기 위해 앞서 언급한 세부 정보를 설명하는 구조체 배열을 가리킵니다.
         // 버텍스 데이터 형식은 크게 두가지 방법으로 표현됩니다.
         // Bindings: 데이터 사이의 간격 및 데이터가 버텍스당인지 또는 인스턴스당인지 여부( 인스턴싱 참조 )
-        // Attribute descriptions : 정점 셰이더에 전달된 속성의 유형, 속성을 로드할 바인딩 및 오프셋
+        // Attribute descriptions : 버텍스 셰이더에 전달된 속성의 유형, 속성을 로드할 바인딩 및 오프셋
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         // 우리가 직접 구성한 버텍스 데이터를 허용하도록 그래픽 파이프라인을 설정해야 합니다. 위에서 미리 만들어둔 Vertex::getBindingDescription() 와 Vertex::getAttributeDescriptions() 를 사용해서 설정값을 채웁니다.
@@ -1112,10 +1180,10 @@ private:
         // 지오메트리를 그리는 방식 (토폴로지) 은 다음과 같은 종류가 있습니다.
         // VK_PRIMITIVE_TOPOLOGY_POINT_LIST :       각각의 점으로 그리기
         // VK_PRIMITIVE_TOPOLOGY_LINE_LIST :        재사용하지 않고 모든 2개의 점을 이어서 라인으로 그리기
-        // VK_PRIMITIVE_TOPOLOGY_LINE_STRIP :       모든 라인의 끝 정점은 다음 라인의 시작 정점으로 사용합니다.
-        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST :    재사용하지 않고 3개의 정점마다 삼각형 그리기
-        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP :   모든 삼각형의 두 번째와 세 번째 정점은 다음 삼각형의 처음 두 정점으로 사용합니다.
-        // @@ 일단 현재는 듀토리얼을 위해 정점으로 삼각형 (TRIANGLE_LIST) 을 그립니다.
+        // VK_PRIMITIVE_TOPOLOGY_LINE_STRIP :       모든 라인의 끝 버텍스는 다음 라인의 시작 버텍스로 사용합니다.
+        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST :    재사용하지 않고 3개의 버텍스마다 삼각형 그리기
+        // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP :   모든 삼각형의 두 번째와 세 번째 버텍스는 다음 삼각형의 처음 두 버텍스로 사용합니다.
+        // @@ 일단 현재는 듀토리얼을 위해 버텍스로 삼각형 (TRIANGLE_LIST) 을 그립니다.
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -1171,7 +1239,7 @@ private:
         rasterizer.lineWidth = 1.0f;
         // 표면 컬링 유형을 결정합니다. 컬링을 비활성화하거나, 앞면을 컬링하거나, 뒷면을 컬링하거나, 둘 모두를 컬링할 수 있습니다. frontFace 변수는 정면으로 간주되는 면의 버텍스 순서를 지정하며 시계 방향 (왼손 중심) 또는 시계 반대 방향 (오른손 중심) 일 수 있습니다.
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // @@@@@@@@@@@
         // 바이어스 값을 사용하여 (상수를 더해) 깊이 값을 계산합니다. 이것은 때때로 그림자 매핑에 사용되지만 우리는 사용하지 않을 것입니다. depthBiasEnable을 VK_FALSE로 설정하기만 하면 됩니다.
         rasterizer.depthBiasEnable = VK_FALSE;
         rasterizer.depthBiasConstantFactor = 0.0f; // Optional
@@ -1245,8 +1313,8 @@ private:
         // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 버텍스 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 0; // Optional
-        pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+        pipelineLayoutInfo.setLayoutCount = 1; // @@@@@@@@@@@@@@@@@
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // @@@@@@@@@@@@@@@
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -1422,17 +1490,22 @@ private:
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
         // 2-11-1.
-        // 현재 가지고 있는 버텍스 버퍼는 올바르게 작동하지만 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 사용할 수 있는 최적의 메모리는 아닐 수 있습니다. 그래픽카드가 접근하기 가장 최적의 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
+        // 현재 가지고 있는 버텍스 버퍼는 올바르게 작동하지만 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 읽을 수 있는 최적의 메모리 유형이 아닐 수 있습니다. 가장 최적의 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
+        // 이제 버텍스 데이터를 매핑하고 복사하기 위해 새로운 stagingBufferMemory 와 함께 stagingBuffer 를 사용하고 있습니다.
+        // 여기서 우리는 두 개의 새로운 버퍼 사용방식 플래그를 설정할 것입니다.
+        // VK_BUFFER_USAGE_TRANSFER_SRC_BIT: 버퍼는 메모리 전송 작업에서 소스로 사용될 수 있습니다.
+        // VK_BUFFER_USAGE_TRANSFER_DST_BIT: 버퍼는 메모리 전송 작업에서 대상(목적지)으로 사용될 수 있습니다.
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        // vertexBuffer는 이제 장치 로컬인 메모리 유형에서 할당됩니다. 이는 일반적으로 vkMapMemory를 사용할 수 없음을 의미합니다. 그러나 stagingBuffer에서는 vertexBuffer로 데이터를 복사할 수 있습니다. 버텍스 버퍼 사용 플래그와 함께 stagingBuffer에 대한 전송 소스 플래그와 vertexBuffer에 대한 전송 대상(목적지) 플래그를 지정하여 그렇게 할 것임을 나타내야 합니다.
 
 
         // 2-11-2.
         // 이제 버텍스 데이터를 버퍼에 복사할 차례입니다. 이것은 vkMapMemory를 사용하여 버퍼 메모리를 CPU 액세스 가능한 메모리에 매핑하여 수행됩니다. 이 함수를 사용하면 오프셋과 크기로 정의된 지정된 메모리 리소스 영역에 액세스할 수 있습니다. 여기서 오프셋과 크기는 각각 0과 bufferInfo.size입니다. 모든 메모리를 매핑하기 위해 특수 값 VK_WHOLE_SIZE를 지정할 수도 있습니다. 마지막에서 두 번째 매개변수는 플래그를 지정하는 데 사용할 수 있지만 현재 API에서는 아직 사용할 수 없습니다. 값을 0으로 설정해야 합니다. 마지막 매개변수는 매핑된 메모리에 대한 포인터의 출력을 지정합니다.
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        // 이제 정점 데이터를 매핑된 메모리에 memcpy하고 vkUnmapMemory를 사용하여 다시 매핑 해제할 수 있습니다. 불행히도 드라이버는 예를 들어 캐싱 때문에 버퍼 메모리에 데이터를 즉시 복사하지 않을 수 있습니다. 버퍼에 대한 쓰기가 아직 매핑된 메모리에 표시되지 않을 수도 있습니다.
+        // 이제 버텍스 데이터를 매핑된 메모리에 memcpy하고 vkUnmapMemory를 사용하여 다시 매핑 해제할 수 있습니다. 불행히도 드라이버는 예를 들어 캐싱 때문에 버퍼 메모리에 데이터를 즉시 복사하지 않을 수 있습니다. 버퍼에 대한 쓰기가 아직 매핑된 메모리에 표시되지 않을 수도 있습니다.
         // 해당 문제를 처리하는 두 가지 방법이 있습니다.
         // 1. VK_MEMORY_PROPERTY_HOST_COHERENT_BIT로 표시된 호스트 일관성 있는 메모리 힙 사용
         // 2. 매핑된 메모리에 쓴 후 vkFlushMappedMemoryRanges를 호출하고 매핑된 메모리에서 읽기 전에 vkInvalidateMappedMemoryRanges를 호출
@@ -1446,16 +1519,110 @@ private:
 
 
         // 2-11-3.
-        // 
+        // 이제 copyBuffer라고 하는 한 버퍼에서 다른 버퍼로 내용을 복사하는 함수를 작성할 것입니다.
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
+        // 스테이징 버퍼는 장치 버퍼로 데이터를 한번만 복사하고는 더 이상 사용하지 않을 것이므로 깔끔히 지웁니다.
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-
+        // 프로그램을 실행하여 익숙한 삼각형이 다시 표시되는지 확인합니다. 지금은 개선 사항이 보이지 않을 수 있지만 버텍스 데이터는 이제 고성능 메모리에서 로드됩니다. 이것은 더 복잡한 지오메트리 렌더링을 시작할 때 중요합니다. 실제 응용 프로그램에서는 모든 개별 버퍼에 대해 실제로 vkAllocateMemory를 호출해서는 안 됩니다. 최대 동시 메모리 할당 수는 maxMemoryAllocationCount 물리적 장치 제한에 의해 제한되며 NVIDIA GTX 1080과 같은 고급 하드웨어에서도 4096개 만큼 낮을 수 있습니다. 동시에 많은 수의 오브젝트 렌더링을 위해 메모리를 할당하는 올바른 방법은 오프셋 매개변수를 사용하여 단일 할당을 여러 오브젝트로 분할하는 사용자 지정 할당자(allocator)를 만드는 것입니다. 이러한 할당자를 본인이 직접 구현하거나 GPUOpen initiative에서 제공하는 VulkanMemoryAllocator 라이브러리를 사용할 수도 있습니다. 그러나 이 자습서에서는 모든 리소스에 대해 별도의 버퍼 할당을 사용해도 괜찮습니다. 지금은 이러한 한계에 거의 도달하지 않을 것이기 때문입니다.
     }
 
-    // 버퍼를 생성하여 메모리를 할당하는 공통 함수
+
+
+    // 2-12. 인덱스 버퍼 생성
+    // createIndexBuffer 함수는 createVertexBuffer와 거의 동일합니다.
+    void createIndexBuffer()
+    {
+        // 눈에 띄는 차이점은 두 가지뿐입니다. bufferSize는 이제 인덱스 수에 인덱스 유형 크기를 곱한 값(uint16_t 또는 uint32_t)과 같습니다. indexBuffer의 사용법은 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 대신 VK_BUFFER_USAGE_INDEX_BUFFER_BIT이어야 합니다. 이는 의미가 있습니다. 그 외에는 프로세스가 버텍스 버퍼 생성과 완전히 동일합니다. 인덱스 내용을 복사할 스테이징 버퍼를 만든 다음 최종 장치 로컬 인덱스 버퍼에 복사합니다.
+        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, indices.data(), (size_t)bufferSize);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+
+        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
+
+
+    // @@@@@@@
+    void createUniformBuffers()
+    {
+        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
+        }
+    }
+
+
+    // @@@@@@@
+    void createDescriptorPool() {
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor pool!");
+        }
+    }
+
+
+    // @@@@@@@
+    void createDescriptorSets() {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.pSetLayouts = layouts.data();
+
+        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate descriptor sets!");
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = uniformBuffers[i];
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(UniformBufferObject);
+
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = descriptorSets[i];
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &bufferInfo;
+
+            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+        }
+    }
+
+    // 다양한 버퍼를 생성하여 메모리를 할당할때 공통적으로 사용될 함수
     HELPER_FUNCTION void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
     {
         // 버퍼를 생성하려면 VkBufferCreateInfo 구조체를 채워야 합니다.
@@ -1490,7 +1657,7 @@ private:
         allocInfo.allocationSize = memRequirements.size;
         allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
-        // 메모리 할당은 이제 정점 버퍼의 메모리 요구 사항과 원하는 속성에서 파생된 크기와 유형을 지정하는 것 만큼 간단합니다. 클래스 멤버를 만들어 핸들을 저장하고 vkAllocateMemory 로 메모리를 할당합니다.
+        // 메모리 할당은 이제 버텍스 버퍼의 메모리 요구 사항과 원하는 속성에서 파생된 크기와 유형을 지정하는 것 만큼 간단합니다. 클래스 멤버를 만들어 핸들을 저장하고 vkAllocateMemory 로 메모리를 할당합니다.
         if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to allocate buffer memory!");
@@ -1501,9 +1668,10 @@ private:
         vkBindBufferMemory(device, buffer, bufferMemory, 0);
     }
 
-    // 
+    // 한 버퍼에서 다른 버퍼로 내용을 복사하는 함수
     HELPER_FUNCTION void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     {
+        // 메모리 전송 작업은 그리기 명령과 마찬가지로 명령 버퍼를 사용하여 실행됩니다. 따라서 반드시 먼저 임시 명령 버퍼를 먼저 할당해야 합니다. 또한 이러한 임시 명령 버퍼들을 위해 별도의 커맨드 풀을 만드는 것도 좋습니다. 이러한 구현이 메모리 할당 최적화를 적용할 수 있기 때문입니다. 이 경우 명령 풀 생성에 VK_COMMAND_POOL_CREATE_TRANSIENT_BIT 플래그를 사용하는 것이 좋습니다.
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -1513,18 +1681,24 @@ private:
         VkCommandBuffer commandBuffer;
         vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
 
+        // 이제 바로 커멘드 버퍼에 명령 기록을 시작합니다. 명령 버퍼를 한 번만 사용하고 복사 작업 실행이 완료되고 함수에서 리턴할때까지 기다리도록 합니다. VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT를 사용하여 불칸 드라이버에게 그 의도를 알리는 것이 좋습니다.
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
+        // 버퍼의 내용은 vkCmdCopyBuffer 명령을 사용하여 전송됩니다. 소스 및 대상(목적지) 버퍼를 인수로 사용하고 복사할 영역 배열을 사용합니다. 영역은 VkBufferCopy 구조체에 정의되며 소스 버퍼 오프셋, 대상(목적지) 버퍼 오프셋 및 크기로 구성됩니다. vkMapMemory 명령과 달리 여기에선 copyRegion.size에 VK_WHOLE_SIZE를 지정할 수 없습니다.
         VkBufferCopy copyRegion{};
+        //copyRegion.srcOffset = 0; // Optional
+        //copyRegion.dstOffset = 0; // Optional
         copyRegion.size = size;
         vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
+        // 이 명령 버퍼에는 복사 명령만 포함되어 있으므로 그 직후에 기록을 중지할 수 있습니다. 이제 명령 버퍼를 실행하여 전송을 완료합니다.
         vkEndCommandBuffer(commandBuffer);
 
+        // 그리기 명령과 달리 이번에는 기다려야 하는 이벤트가 없습니다. 우리는 버퍼에서 즉시 전송을 실행하기를 원합니다. 이 전송이 완료될 때까지 기다리는 두 가지 가능한 방법이 있습니다. 울타리를 사용하고 vkwaitForFences로 기다리거나 단순히 vkQueueWaitIdle로 전송 대기열이 유휴 상태가 될 때까지 기다릴 수 있습니다. 울타리를 사용하면 한 번에 하나씩 실행하는 대신 여러 전송을 동시에 예약하고 모두 완료될 때까지 기다릴 수 있습니다. 이는 불칸 드라이버에게 최적화할 수 있는 더 많은 기회를 제공할 수 있습니다.
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
@@ -1533,6 +1707,7 @@ private:
         vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(graphicsQueue);
 
+        // 전송 작업에 사용된 명령 버퍼를 정리하는 것을 잊지 마십시오.
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
 
@@ -1547,7 +1722,7 @@ private:
         // 먼저 버퍼 자체에 적합한 메모리 유형을 찾아보겠습니다.
         for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
         {
-            // typeFilter 매개변수는 적합한 메모리 유형의 비트 필드를 지정하는 데 사용됩니다. 즉, 단순히 연속적으로 해당 인덱스 번째의 비트가 1로 설정되어 있는지 찾아가며 적절한 메모리 유형의 인덱스를 찾을 수 있습니다. 그러나 정점 버퍼에 적합한 메모리 유형에만 관심이 있는 것은 아닙니다.또한 정점 데이터를 해당 메모리에 쓸 수 있어야 합니다. memoryTypes 배열은 각 메모리 유형의 힙 및 속성을 지정하는 VkMemoryType 구조체로 구성됩니다. 속성은 CPU 에서 메모리에 쓸 수 있도록 매핑할 수 있는 것과 같은 메모리의 특수 기능을 정의합니다.이 속성은 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT로 표시되지만 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT 속성도 사용해야 합니다. 메모리를 매핑할 때 그 이유를 알게 될 것입니다.
+            // typeFilter 매개변수는 적합한 메모리 유형의 비트 필드를 지정하는 데 사용됩니다. 즉, 단순히 연속적으로 해당 인덱스 번째의 비트가 1로 설정되어 있는지 찾아가며 적절한 메모리 유형의 인덱스를 찾을 수 있습니다. 그러나 버텍스 버퍼에 적합한 메모리 유형에만 관심이 있는 것은 아닙니다.또한 버텍스 데이터를 해당 메모리에 쓸 수 있어야 합니다. memoryTypes 배열은 각 메모리 유형의 힙 및 속성을 지정하는 VkMemoryType 구조체로 구성됩니다. 속성은 CPU 에서 메모리에 쓸 수 있도록 매핑할 수 있는 것과 같은 메모리의 특수 기능을 정의합니다.이 속성은 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT로 표시되지만 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT 속성도 사용해야 합니다. 메모리를 매핑할 때 그 이유를 알게 될 것입니다.
             // 추가로 하나 이상의 원하는 속성이 있을 수 있으므로 비트 AND 의 결과가 0 이 아니라 원하는 속성 비트 필드와 같은지 확인해야 합니다. 필요한 모든 속성을 포함하는 버퍼에 적합한 메모리 유형이 있으면 해당 인덱스를 반환하고, 그렇지 않으면 예외를 throw 합니다.
             if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
             {
@@ -1560,7 +1735,7 @@ private:
 
 
 
-    // 2-12. 그래픽 카드로 보낼 커맨드 버퍼 생성
+    // 2-13. 그래픽 카드로 보낼 커맨드 버퍼 생성
     inline void createCommandBuffers()
     {
         // 각각의 프레임 마다 커맨드 버퍼가 존재해야 하므로, 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 만큼으로 조정합니다.
@@ -1588,10 +1763,10 @@ private:
 
 
 
-    // 2-13. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+    // 2-14. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     inline void createSyncObjects()
     {
-        //
+        // 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
         imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1686,6 +1861,9 @@ private:
             throw std::runtime_error("Failed to acquire swap chain image!");
         }
 
+        // @@@@@@@@@@@@@
+        updateUniformBuffer(currentFrame);
+
         // 대기 후 vkResetFences를 사용하여 수동으로 펜스를 unsignaled 상태로 재설정해야 합니다.
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
         // 계속 진행하기 전에 디자인에 약간의 문제가 있습니다. 첫 번째 프레임에서 우리는 inFlightFence가 신호를 받을 때까지 즉시 대기하는 drawFrame()을 호출합니다. inFlightFence는 프레임 렌더링이 완료된 후에만 신호를 보내지만 이것이 첫 번째 프레임이기 때문에 펜스에 신호를 보낼 이전 프레임이 없습니다! 따라서 vkWaitForFences()는 절대 일어나지 않을 일을 기다리며 무기한 차단합니다. 이 딜레마에 대한 많은 솔루션 중에서 API에 내장된 영리한 해결 방법이 있습니다. vkwaitForFences()에 대한 첫 번째 호출이 펜스가 이미 신호를 받았던 것처럼 즉시 반환되도록 신호된 상태에서 펜스를 생성합니다. 이를 위해 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다. 이를 위해 위에 만들었던 createSyncObjects() 함수 내 VkFenceCreateInfo에 VK_FENCE_CREATE_SIGNALED_BIT 플래그를 추가합니다.
@@ -1699,7 +1877,7 @@ private:
         // 커맨드 버퍼를 그래픽카드에 제출하기
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        // 처음 세 개의 매개변수는 실행이 시작되기 전에 대기할 세마포어와 파이프라인의 어느 단계에서 대기할 것인지 지정합니다. 사용할 수 있을 때까지 이미지에 색상을 기록하기를 원하므로 색상 첨부 파일에 기록하는 그래픽 파이프라인의 단계를 지정하고 있습니다. 즉, 이론적으로 구현은 이미 이미지를 사용할 수 없는 동안 정점 셰이더 등의 실행을 시작할 수 있습니다. waitStages 배열의 각 항목은 pWaitSemaphores 에 동일한 인덱스로 있는 세마포어에 해당합니다.
+        // 처음 세 개의 매개변수는 실행이 시작되기 전에 대기할 세마포어와 파이프라인의 어느 단계에서 대기할 것인지 지정합니다. 사용할 수 있을 때까지 이미지에 색상을 기록하기를 원하므로 색상 첨부 파일에 기록하는 그래픽 파이프라인의 단계를 지정하고 있습니다. 즉, 이론적으로 구현은 이미 이미지를 사용할 수 없는 동안 버텍스 셰이더 등의 실행을 시작할 수 있습니다. waitStages 배열의 각 항목은 pWaitSemaphores 에 동일한 인덱스로 있는 세마포어에 해당합니다.
         VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         submitInfo.waitSemaphoreCount = 1;
@@ -1785,6 +1963,26 @@ private:
         createFramebuffers();
     }
 
+    // @@@@@@@@@@@@
+    HELPER_FUNCTION void updateUniformBuffer(uint32_t currentImage)
+    {
+        static auto startTime = std::chrono::high_resolution_clock::now();
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+        UniformBufferObject ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+        ubo.proj[1][1] *= -1;
+
+        void* data;
+        vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
+        memcpy(data, &ubo, sizeof(ubo));
+        vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
+    }
+
     // 커맨드 버퍼를 기록하도록 해주는 함수입니다.
     HELPER_FUNCTION void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     {
@@ -1835,20 +2033,35 @@ private:
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
 
-        // 이제 렌더링 작업 동안 정점 버퍼를 바인딩 하면 됩니다.
+        // 이제 렌더링 작업 동안 버텍스 버퍼를 바인딩 하면 됩니다.
         VkBuffer vertexBuffers[] = { vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
-        // vkCmdBindVertexBuffers 함수는 이전 장에서 설정한 것과 같이 정점 버퍼를 바인딩에 바인딩하는 데 사용됩니다. 명령 버퍼 외에 처음 두 매개변수는 정점 버퍼를 지정할 오프셋과 바인딩 수를 지정합니다. 마지막 두 매개변수는 바인딩할 정점 버퍼의 배열과 정점 데이터 읽기를 시작할 바이트 오프셋을 지정합니다.
+        // vkCmdBindVertexBuffers 함수는 이전 장에서 설정한 것과 같이 버텍스 버퍼를 바인딩에 바인딩하는 데 사용됩니다. 명령 버퍼 외에 처음 두 매개변수는 버텍스 버퍼를 지정할 오프셋과 바인딩 수를 지정합니다. 마지막 두 매개변수는 바인딩할 버텍스 버퍼의 배열과 버텍스 데이터 읽기를 시작할 바이트 오프셋을 지정합니다.
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        // 또한 vkCmdDraw에 대한 호출을 변경하여 하드코딩된 숫자 3이 아닌 버퍼의 정점 수를 전달해야 합니다.
+
+        // 인덱스 버퍼를 활용하여 그립니다.
+        // 그리기에 인덱스 버퍼를 사용하면 recordCommandBuffer에 두 가지 변경 사항이 포함됩니다. 버텍스 버퍼에 대해 했던 것처럼 먼저 인덱스 버퍼를 바인딩해야 합니다. 차이점은 단일 인덱스 버퍼만 가질 수 있다는 것입니다. 불행히도 각 버텍스의 세부 속성 활용을 위해 다른 인덱스를 사용할 수는 없으므로 하나의 속성만 달라지더라도 꼭짓점 데이터를 완전히 복제해야 합니다. 인덱스 버퍼는 인덱스 버퍼, 바이트 오프셋 및 인덱스 데이터 유형을 매개 변수로 포함하는 vkCmdBindIndexBuffer로 바인딩됩니다. 앞에서 언급했듯이 가능한 유형은 VK_INDEX_TYPE_UINT16 및 VK_INDEX_TYPE_UINT32입니다. 인덱스 버퍼를 바인딩하는 것만으로는 아직 아무 것도 변경되지 않습니다. 또한 Vulkan이 인덱스 버퍼를 사용하도록 지시하기 위해 그리기 명령을 변경해야 합니다. vkCmdDraw 줄을 제거하고 vkCmdDrawIndexed로 바꿉니다. 이 함수에 대한 호출은 vkCmdDraw와 매우 유사합니다. 처음 두 매개변수는 인덱스 수와 인스턴스 수를 지정합니다. 우리는 인스턴싱을 사용하지 않으므로 단지 1개의 인스턴스를 지정하였습니다. 인덱스 수는 정점 버퍼에 전달될 정점의 수를 나타냅니다. 다음 매개변수는 인덱스 버퍼에 대한 오프셋을 지정하며 값 1을 사용하면 그래픽 카드가 두 번째 인덱스에서 읽기 시작합니다. 마지막에서 두 번째 매개변수는 인덱스 버퍼의 인덱스에 추가할 오프셋을 지정합니다. 마지막 매개변수는 우리가 사용하지 않는 인스턴싱을 위한 오프셋을 지정합니다. 이제 프로그램을 실행하면 직사각형이 표시됩니다.
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+
+        // @@@@@@
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+
+
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+        // 이제 인덱스 버퍼를 사용해 버텍스를 재사용하여 메모리를 절약하는 방법을 알게 되었습니다. 이것은 우리가 복잡한 3D 모델을 로드할 미래에 특히 중요해질 것입니다. 이전 장에서 이미 단일 메모리 할당에서 버퍼와 같은 여러 리소스를 할당해야 한다고 언급했었는데 거기에 더해 드라이버 개발자는 정점 및 인덱스 버퍼와 같은 여러 버퍼를 하나의 VkBuffer에 저장하고 vkCmdBindVertexBuffers와 같은 명령에서 오프셋을 사용할 것을 권장합니다. 이 경우 데이터가 더 가깝기 때문에 데이터가 캐시 친화적이라는 장점이 있습니다. 물론 데이터가 새로 고쳐지면 동일한 렌더링 작업 중에 사용되지 않는 경우 여러 리소스에 대해 동일한 메모리 청크를 재사용할 수도 있습니다. 이것을 앨리어싱이라고 하며 일부 Vulkan 함수에는 이를 수행하도록 지정하는 명시적 플래그가 있습니다.
+
+        /*
+        인덱스 버퍼를 사용하지 않는 버전
+        // 또한 vkCmdDraw에 대한 호출을 변경하여 하드코딩된 숫자 3이 아닌 버퍼의 버텍스 수를 전달해야 합니다.
         // 실제 vkCmdDraw 함수는 약간 빈약해 보이지만 우리가 이미 설정했던 많은 정보들 때문에 매우 간단하게 구성됩니다. 커맨드 버퍼를 제외하고 다음 매개변수가 있습니다.
-        // vertexCount: 정점 버퍼가 없더라도 기술적으로 여전히 그릴 정점이 3개 있습니다. (셰이더 코드에)
+        // vertexCount: 버텍스 버퍼가 없더라도 기술적으로 여전히 그릴 버텍스가 3개 있습니다. (셰이더 코드에)
         // instanceCount: 인스턴스 렌더링에 사용되며, 그렇게 하지 않는 경우 1을 사용합니다.
-        // firstVertex : 정점 버퍼에 대한 오프셋으로 사용되며 gl_VertexIndex의 가장 낮은 값을 정의합니다.
+        // firstVertex : 버텍스 버퍼에 대한 오프셋으로 사용되며 gl_VertexIndex의 가장 낮은 값을 정의합니다.
         // firstInstance : 인스턴스 렌더링의 오프셋으로 사용되며 gl_InstanceIndex의 가장 낮은 값을 정의합니다.
         vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
-
+        */
 
         // 이제 렌더 패스를 종료할 수 있습니다.
         vkCmdEndRenderPass(commandBuffer);
@@ -1868,9 +2081,26 @@ private:
         // 스왑 체인을 다시 만들기 위해 이전 버전을 정리합니다.
         cleanupSwapChain();
 
+        // 
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            vkDestroyBuffer(device, uniformBuffers[i], nullptr);
+            vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+        }
+
+        // 
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+
+        // 
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+
         // 물론 C++의 동적 메모리 할당과 마찬가지로 메모리는 어느 시점에선 해제되어야 합니다. 버퍼 객체에 묶인 메모리는 버퍼가 더 이상 사용되지 않으면 해제될 수 있으므로 버퍼가 파괴된 후에 해제하도록 합니다. 버퍼는 프로그램이 끝날 때까지 명령을 렌더링하는 데 사용할 수 있어야 하며 스왑 체인에 의존하지 않으므로 cleanup()에서 정리 하였습니다.
+        // 버텍스 버퍼를 지웁니다.
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
+        // 인덱스 버퍼를 지웁니다. 인덱스 버퍼는 버텍스 버퍼와 마찬가지로 프로그램 끝에서 정리해야 합니다.
+        vkDestroyBuffer(device, indexBuffer, nullptr);
+        vkFreeMemory(device, indexBufferMemory, nullptr);
 
         // 세마포어와 펜스는 모든 명령이 완료되고 더 이상 동기화가 필요하지 않을 때 프로그램 끝에서 정리해야 합니다.
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
