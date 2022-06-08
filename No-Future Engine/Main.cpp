@@ -1422,7 +1422,7 @@ private:
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
         // 2-11-1.
-        // 현재 가지고 있는 버텍스 버퍼는 올바르게 작동하지만 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 읽을 수 있는 최적의 메모리 유형이 아닐 수 있습니다. 가장 최적의 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
+        // 현재 가지고 있는 버텍스 버퍼는 올바르게 작동하지만 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 사용할 수 있는 최적의 메모리는 아닐 수 있습니다. 그래픽카드가 접근하기 가장 최적의 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
