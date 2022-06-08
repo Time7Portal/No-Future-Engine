@@ -314,27 +314,27 @@ private:
 
         createRenderPass();             // 2-7. 렌더 패스 생성
 
-        createDescriptorSetLayout();    // 
+        createDescriptorSetLayout();    // 2-8. 
 
-        createGraphicsPipeline();       // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
+        createGraphicsPipeline();       // 2-9. 셰이더 로드 및 그래픽스 파이프라인 생성
 
-        createFramebuffers();           // 2-9. 프레임 버퍼들을 생성
+        createFramebuffers();           // 2-10. 프레임 버퍼들을 생성
 
-        createCommandPool();            // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
+        createCommandPool();            // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createVertexBuffer();           // 2-11. 버텍스 버퍼 생성
+        createVertexBuffer();           // 2-12. 버텍스 버퍼 생성
 
-        createIndexBuffer();            // 2-12. 인덱스 버퍼 생성
+        createIndexBuffer();            // 2-13. 인덱스 버퍼 생성
 
-        createUniformBuffers();         // 
+        createUniformBuffers();         // 2-14. 
 
-        createDescriptorPool();         // 
+        createDescriptorPool();         // 2-15. 
 
-        createDescriptorSets();         // 
+        createDescriptorSets();         // 2-16. 
 
-        createCommandBuffers();         // 2-13. 그래픽 카드로 보낼 커맨드 버퍼 생성
+        createCommandBuffers();         // 2-17. 그래픽 카드로 보낼 커맨드 버퍼 생성
 
-        createSyncObjects();            // 2-14. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+        createSyncObjects();            // 2-18. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     }
 
 
@@ -1116,22 +1116,22 @@ private:
 
 
 
-    // 2-8. 셰이더 로드 및 그래픽스 파이프라인 생성
+    // 2-9. 셰이더 로드 및 그래픽스 파이프라인 생성
     inline void createGraphicsPipeline()
     {
         // ------------- 이 아래로는 프로그래밍 가능한 셰이더 스테이지 (Shader stages) 에 대한 설정입니다. -------------
         
-        // 2-8-1. 바이너리 파일을 읽어서 바이트 배열로 반환합니다.
+        // 2-9-1. 바이너리 파일을 읽어서 바이트 배열로 반환합니다.
         auto vertShaderCode = readFile("Shaders/hello_triangle_shader.vert.spv");
         auto fragShaderCode = readFile("Shaders/hello_triangle_shader.frag.spv");
 
-        // 2-8-2. 바이트 배열로 저장된 버퍼를 받아서 셰이더 모듈 (VkShaderModule) 를 만듭니다. 셰이더 모듈은 단순히 셰이더 바이트코드의 얇은 래퍼입니다.
+        // 2-9-2. 바이트 배열로 저장된 버퍼를 받아서 셰이더 모듈 (VkShaderModule) 를 만듭니다. 셰이더 모듈은 단순히 셰이더 바이트코드의 얇은 래퍼입니다.
         // GPU에서 실행하기 위해 SPIR-V 바이트코드를 기계어 코드로 컴파일하고 링킹하는 작업은 그래픽 파이프라인이 생성될 때까진 발생하지 않습니다. 즉, 파이프라인 생성이 완료되는 즉시 셰이더 모듈을 파괴해도 상관없습니다. 따라서 클래스 멤버 대신 createGraphicsPipeline 함수 내 로컬 변수로 만들었습니다.
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
 
 
-        // 2-8-3. 셰이더 스테이지를 설정합니다. 셰이더를 사용하기 위해서는 특정한 파이프라인 스테이지에 배치하여야 합니다.
+        // 2-9-3. 셰이더 스테이지를 설정합니다. 셰이더를 사용하기 위해서는 특정한 파이프라인 스테이지에 배치하여야 합니다.
         // 버텍스 셰이더 스테이지를 정의합니다.
         VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
         vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1160,7 +1160,7 @@ private:
         
         // 이전 세대 그래픽스 API 에서는 그래픽스 파이프라인의 대부분의 단계에 대해 기본 설정을 제공하지만, 불칸은 모든 것들을 직접 다 설정해야 합니다.
 
-        // 2-8-4. 버텍스 셰이더에 어떤 형식으로 버텍스 데이터를 집어넣을지 설정합니다. pVertexBindingDescriptions 및 pVertexAttributeDescriptions 멤버는 버텍스 데이터를 로드하기 위해 앞서 언급한 세부 정보를 설명하는 구조체 배열을 가리킵니다.
+        // 2-9-4. 버텍스 셰이더에 어떤 형식으로 버텍스 데이터를 집어넣을지 설정합니다. pVertexBindingDescriptions 및 pVertexAttributeDescriptions 멤버는 버텍스 데이터를 로드하기 위해 앞서 언급한 세부 정보를 설명하는 구조체 배열을 가리킵니다.
         // 버텍스 데이터 형식은 크게 두가지 방법으로 표현됩니다.
         // Bindings: 데이터 사이의 간격 및 데이터가 버텍스당인지 또는 인스턴스당인지 여부( 인스턴싱 참조 )
         // Attribute descriptions : 버텍스 셰이더에 전달된 속성의 유형, 속성을 로드할 바인딩 및 오프셋
@@ -1176,7 +1176,7 @@ private:
         // 파이프라인은 이제 설정한 버텍스 컨테이너 형식의 버텍스 데이터를 받아 버텍스 셰이더에 전달할 준비가 되었습니다. 유효성 검사 레이어가 활성화된 상태에서 프로그램을 실행하면 바인딩된 버텍스 버퍼가 없다고 불평하는 것을 볼 수 있습니다. @@ 다음 단계는 버텍스 버퍼를 만들고 버텍스 데이터를 GPU가 액세스할 수 있도록 버텍스 버퍼로 이동하는 것입니다.
 
 
-        // 2-8-5. 버텍스 데이터들을 가지고 어떤 방식으로 지오메트리를 그릴지, 그리고 다른 프리미티브로 그리기 여부를 설정합니다. 일반적으로 버텍스은 인덱스에 따라 버텍스 버퍼에서 순차적으로 로드되지만 element 버퍼 를 사용하면 인덱스를 지정하여 사용할 수 있습니다. 이를 통해 버텍스 재사용과 같은 최적화를 수행할 수 있습니다. primitiveRestartEnable 멤버를 VK_TRUE로 설정하면 0xFFFF 또는 0xFFFFFFFF 같은 특수 인덱스를 사용하여 _STRIP 토폴로지 모드에서 선과 삼각형을 분할할 수 있습니다.
+        // 2-9-5. 버텍스 데이터들을 가지고 어떤 방식으로 지오메트리를 그릴지, 그리고 다른 프리미티브로 그리기 여부를 설정합니다. 일반적으로 버텍스은 인덱스에 따라 버텍스 버퍼에서 순차적으로 로드되지만 element 버퍼 를 사용하면 인덱스를 지정하여 사용할 수 있습니다. 이를 통해 버텍스 재사용과 같은 최적화를 수행할 수 있습니다. primitiveRestartEnable 멤버를 VK_TRUE로 설정하면 0xFFFF 또는 0xFFFFFFFF 같은 특수 인덱스를 사용하여 _STRIP 토폴로지 모드에서 선과 삼각형을 분할할 수 있습니다.
         // 지오메트리를 그리는 방식 (토폴로지) 은 다음과 같은 종류가 있습니다.
         // VK_PRIMITIVE_TOPOLOGY_POINT_LIST :       각각의 점으로 그리기
         // VK_PRIMITIVE_TOPOLOGY_LINE_LIST :        재사용하지 않고 모든 2개의 점을 이어서 라인으로 그리기
@@ -1190,7 +1190,7 @@ private:
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 
-        // 2-8-6. 뷰포트 영역을 설정합니다.
+        // 2-9-6. 뷰포트 영역을 설정합니다.
         // 뷰포트는 기본적으로 출력이 렌더링될 프레임 버퍼의 영역을 설명합니다. 이것은 거의 항상 (0, 0) ~ (너비, 높이) 입니다.
         VkViewport viewport{};
         viewport.x = 0.0f;
@@ -1203,7 +1203,7 @@ private:
         viewport.maxDepth = 1.0f;
 
 
-        // 2-8-7. 시저 영역을 설정합니다.
+        // 2-9-7. 시저 영역을 설정합니다.
         // 뷰포트는 이미지에서 프레임 버퍼로의 변환을 정의하는 반면 시저 직사각형은 픽셀이 실제로 저장될 영역을 정의합니다. 시저 직사각형 외부의 모든 픽셀은 래스터라이저에 의해 연산되지 않고 무시됩니다. 변환이 아니라 필터처럼 작동하므로 성능 향상을 볼 수 있습니다. 차이점은 이 이미지를 참고해주세요 - https://vulkan-tutorial.com/images/viewports_scissors.png
         // @@ 일단 지금은 화면 전부를 보여주기 위해 프레임 버퍼 크기만큼 덮는 시저로 설정합니다.
         VkRect2D scissor{};
@@ -1211,7 +1211,7 @@ private:
         scissor.extent = swapChainExtent;
 
 
-        // 2-8-8. 뷰포트와 시저 영역 설정들을 결합합니다.
+        // 2-9-8. 뷰포트와 시저 영역 설정들을 결합합니다.
         // 뷰포트와 시저 영역 설정은 VkPipelineViewportStateCreateInfo 구조체를 사용하여 뷰포트 스테이트로 결합되어야 합니다. 일부 그래픽 카드에서는 여러 뷰포트와 가위형 직사각형을 사용할 수 있으므로 해당 멤버는 해당 그래픽 카드의 배열을 참조합니다. 여러 개를 사용하려면 GPU 기능을 활성화해야 합니다 (추상적 장치 생성 참조).
         VkPipelineViewportStateCreateInfo viewportState{};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1221,7 +1221,7 @@ private:
         viewportState.pScissors = &scissor;
 
 
-        // 2-8-9. 레스터라이저를 설정합니다.
+        // 2-9-9. 레스터라이저를 설정합니다.
         // 래스터라이저는 버텍스 셰이더에서 만들어진 지오메트리를 가져와 프레그먼트 셰이더를 가지고 색칠된 조각으로 바꿉니다. 또한 depth testing, face culling, scissor test 를 수행하며 전체 다각형 또는 가장자리(와이어프레임 렌더링)만 그리도록 구성할 수도 있습니다. 이 모든 것은 VkPipelineRasterizationStateCreateInfo 로 설정합니다.
         VkPipelineRasterizationStateCreateInfo rasterizer{};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -1247,7 +1247,7 @@ private:
         rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
 
 
-        // 2-8-10. 멀티샘플링을 설정합니다.
+        // 2-9-10. 멀티샘플링을 설정합니다.
         // VkPipelineMultisampleStateCreateInfo 구조체는 안티앨리어싱을 수행하는 방법 중 하나인 멀티샘플링을 구성합니다. 동일한 픽셀에서 여러 다각형의 프레그먼트 셰이더 결과를 결합하여 작동합니다. 이것은 주로 가장 눈에 띄는 앨리어싱 아티팩트가 발생하는 가장자리 계단 현상을 해결합니다. 하나의 폴리곤만 픽셀에 매핑되는 경우 프래그먼트 셰이더를 여러 번 실행할 필요가 없기 때문에 단순히 더 높은 해상도로 렌더링한 다음 축소하는 것보다 훨씬 저렴합니다. 활성화하려면 GPU 기능을 활성화해야 합니다. 지금은 비활성화 상태로 둡니다.
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -1259,12 +1259,12 @@ private:
         multisampling.alphaToOneEnable = VK_FALSE; // Optional
 
 
-        // 2-8-11. 깊이 및 스텐실 테스팅을 설정합니다.
+        // 2-9-11. 깊이 및 스텐실 테스팅을 설정합니다.
         // 깊이 및/또는 스텐실 버퍼를 사용하는 경우 VkPipelineDepthStencilStateCreateInfo를 사용하여 깊이 및 스텐실 테스트도 구성해야 합니다. 지금 당장은 없으므로 그러한 구조체에 대한 포인터 대신 nullptr을 전달할 수 있습니다. 깊이 버퍼링 장에서 다시 다루겠습니다.
         // @@ ---아직은 코드없음---
 
 
-        // 2-8-12. 컬러 블랜딩을 설정합니다.
+        // 2-9-12. 컬러 블랜딩을 설정합니다.
         // 프레그먼트 셰이더가 색상을 반환한 후에는 이미 프레임 버퍼에 있는 색상과 결합해야 합니다. 이 변환을 색상 혼합이라고 하며 두 가지 방법으로 수행할 수 있습니다.
         // 1) 이전 값과 새 값을 혼합하여 최종 색상 생성
         // 2) 비트 연산을 사용하여 이전 값과 새 값 결합 (logicOpEnable을 VK_TRUE로 설정해야 합니다.)
@@ -1295,7 +1295,7 @@ private:
         colorBlending.blendConstants[3] = 0.0f; // Optional
 
 
-        // 2-8-13. 동적 스테이트를 설정합니다.
+        // 2-9-13. 동적 스테이트를 설정합니다.
         // 위에서 우리가 만들었던 설정값들은 사실 파이프라인을 완전히 새로 만들지 않고도 변경할 수 있습니다. 뷰포트의 크기, 선 너비 및 블렌드 상수가 그 예입니다. 그렇게 하려면 다음과 같이 VkPipelineDynamicStateCreateInfo 구조를 채워야 합니다. 이렇게 하면 이러한 값의 구성이 무시되고 드로잉 시(런타임) 에 데이터를 지정해야 합니다. 이에 대해서는 다음 장에서 다시 다루겠습니다. 이 구조체는 나중에 동적 상태가 없는 경우 nullptr로 대체될 수 있습니다.
         //std::vector<VkDynamicState> dynamicStates = {
         //    VK_DYNAMIC_STATE_VIEWPORT,
@@ -1309,7 +1309,7 @@ private:
 
         // ------------- 이 아래로는 런타임에 셰이더에서 참조하는 uniform 과 push values 값들에 대한 설정 (Pipeline layout) 입니다. -------------
 
-        // 2-8-14. 파이프라인 레이아웃을 설정합니다. (파이프라인 레이아웃은 사실 스왑 체인에 묶여서 생성되고 파괴되지 않아도 되는 별개의 존재라고 합니다.. 유연한 셰이더 스위칭을 위해 셰이더 모듈과 함께 나중에 별도의 파일로 분리하는게 좋을 것 같습니다.)
+        // 2-9-14. 파이프라인 레이아웃을 설정합니다. (파이프라인 레이아웃은 사실 스왑 체인에 묶여서 생성되고 파괴되지 않아도 되는 별개의 존재라고 합니다.. 유연한 셰이더 스위칭을 위해 셰이더 모듈과 함께 나중에 별도의 파일로 분리하는게 좋을 것 같습니다.)
         // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 버텍스 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1319,7 +1319,7 @@ private:
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
 
-        // 2-8-15. 파이프라인 레이아웃을 생성합니다.
+        // 2-9-15. 파이프라인 레이아웃을 생성합니다.
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create pipeline layout!");
@@ -1328,7 +1328,7 @@ private:
 
         // ------------- 이 아래로는 파이프라인 스테이지에서 참조하는 어태치먼트 및 어태치먼트 사용방식 설정 (Render pass) 입니다. -------------
         
-        // 2-8-16. 그래픽스 파이프라인을 설정합니다.
+        // 2-9-16. 그래픽스 파이프라인을 설정합니다.
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         // 셰이더 스테이지 설정
@@ -1423,7 +1423,7 @@ private:
 
 
 
-    // 2-9. 프레임 버퍼들을 생성
+    // 2-10. 프레임 버퍼들을 생성
     inline void createFramebuffers()
     {
         // 렌더 패스 생성 중에 지정된 어태치먼트는 VkFramebuffer 개체로 래핑하여 바인딩됩니다. 프레임 버퍼 개체는 어태치먼트를 나타내는 모든 VkImageView 개체를 참조합니다. 우리의 경우 그것은 단 하나일 것입니다: 색상 어태치먼트. 그러나 어태치먼트에 사용해야 하는 이미지는 프레젠테이션을 위해 스왑 체인이 반환하는 이미지에 따라 다릅니다. 때문에 스왑 체인에 들어있는 모든 이미지들에 대해 프레임 버퍼를 생성하고 드로잉 시 회수된 이미지에 해당하는 프레임 버퍼를 사용해야 합니다.
@@ -1457,7 +1457,7 @@ private:
 
 
 
-    // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성
+    // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성
     inline void createCommandPool()
     {
         // 그리기 작업 및 메모리 전송과 같은 Vulkan의 명령은 함수 호출을 사용하여 직접 실행되지 않습니다. 커맨드 버퍼 개체에 수행하려는 모든 작업을 기록해야 합니다. 이것의 장점은 우리가 하고 싶은 것을 Vulkan 에게 한꺼번에 전달하고 Vulkan이 모든 명령을 함께 사용할 수 있기 때문에 명령을 더 효율적으로 처리할 수 있습니다. 또한 원하는 경우 여러 스레드에서 명령 기록을 수행할 수도 있습니다.
@@ -1482,14 +1482,14 @@ private:
 
 
 
-    // 2-11. 버텍스 버퍼 생성
+    // 2-12. 버텍스 버퍼 생성
     // Vulkan의 버퍼는 그래픽 카드에서 읽을 수 있는 임의의 데이터를 저장하는 데 사용되는 메모리 영역입니다. 그것들은 버텍스 데이터를 저장하는 데 사용할 수 있으며, 물론 다른 많은 목적으로도 사용할 수 있습니다. 지금까지 다루었던 Vulkan 객체들과 달리 버퍼는 자동으로 메모리를 할당하지 않습니다. Vulkan API는 프로그래머가 거의 모든 것을 제어할 수 있도록 던져주며 메모리 관리는 그 중에 하나입니다.
     inline void createVertexBuffer()
     {
         // 버퍼의 크기를 바이트 단위로 지정하는 크기입니다. 버텍스 데이터의 바이트 크기를 계산하는 것은 sizeof를 사용하면 간단합니다.
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-        // 2-11-1.
+        // 2-12-1.
         // 버텍스 버퍼만 사용해도 올바르게 작동하지만 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 플래그가 있어 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 사용할 수 있는 최적의 메모리는 아닐 수 있습니다. 그래픽카드가 접근하기 가장 빠른 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
         // 이제 버텍스 데이터를 매핑하고 복사하기 위해 새로운 stagingBufferMemory 와 함께 stagingBuffer 를 사용하고 있습니다.
         // 여기서 우리는 두 개의 새로운 버퍼 사용방식 플래그를 설정할 것입니다.
@@ -1501,7 +1501,7 @@ private:
         // vertexBuffer는 이제 장치 로컬인 메모리 유형에서 할당됩니다. 이는 일반적으로 vkMapMemory를 사용할 수 없음을 의미합니다. 그러나 stagingBuffer에서는 vertexBuffer로 데이터를 복사할 수 있습니다. 버텍스 버퍼 사용 플래그와 함께 stagingBuffer에 대한 전송 소스 플래그와 vertexBuffer에 대한 전송 대상(목적지) 플래그를 지정하여 그렇게 할 것임을 나타내야 합니다.
 
 
-        // 2-11-2.
+        // 2-12-2.
         // 이제 버텍스 데이터를 버퍼에 복사할 차례입니다. 이것은 vkMapMemory를 사용하여 버퍼 메모리를 CPU 액세스 가능한 메모리에 매핑하여 수행됩니다. 이 함수를 사용하면 오프셋과 크기로 정의된 지정된 메모리 리소스 영역에 액세스할 수 있습니다. 여기서 오프셋과 크기는 각각 0과 bufferInfo.size입니다. 모든 메모리를 매핑하기 위해 특수 값 VK_WHOLE_SIZE를 지정할 수도 있습니다. 마지막에서 두 번째 매개변수는 플래그를 지정하는 데 사용할 수 있지만 현재 API에서는 아직 사용할 수 없습니다. 값을 0으로 설정해야 합니다. 마지막 매개변수는 매핑된 메모리에 대한 포인터의 출력을 지정합니다.
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
@@ -1518,7 +1518,7 @@ private:
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 
 
-        // 2-11-3.
+        // 2-12-3.
         // 이제 copyBuffer라고 하는 한 버퍼에서 다른 버퍼로 내용을 복사하는 함수를 작성할 것입니다.
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
@@ -1531,7 +1531,7 @@ private:
 
 
 
-    // 2-12. 인덱스 버퍼 생성
+    // 2-13. 인덱스 버퍼 생성
     // createIndexBuffer 함수는 createVertexBuffer와 거의 동일합니다.
     void createIndexBuffer()
     {
@@ -1572,7 +1572,8 @@ private:
 
 
     // @@@@@@@
-    void createDescriptorPool() {
+    void createDescriptorPool()
+    {
         VkDescriptorPoolSize poolSize{};
         poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
@@ -1583,14 +1584,16 @@ private:
         poolInfo.pPoolSizes = &poolSize;
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
+        {
             throw std::runtime_error("failed to create descriptor pool!");
         }
     }
 
 
     // @@@@@@@
-    void createDescriptorSets() {
+    void createDescriptorSets()
+    {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1599,11 +1602,13 @@ private:
         allocInfo.pSetLayouts = layouts.data();
 
         descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS)
+        {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
             VkDescriptorBufferInfo bufferInfo{};
             bufferInfo.buffer = uniformBuffers[i];
             bufferInfo.offset = 0;
@@ -1735,7 +1740,7 @@ private:
 
 
 
-    // 2-13. 그래픽 카드로 보낼 커맨드 버퍼 생성
+    // 2-17. 그래픽 카드로 보낼 커맨드 버퍼 생성
     inline void createCommandBuffers()
     {
         // 각각의 프레임 마다 커맨드 버퍼가 존재해야 하므로, 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 만큼으로 조정합니다.
@@ -1763,7 +1768,7 @@ private:
 
 
 
-    // 2-14. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+    // 2-18. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     inline void createSyncObjects()
     {
         // 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
