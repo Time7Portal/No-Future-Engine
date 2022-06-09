@@ -4,14 +4,15 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // OpenGL과 다르게 0 ~ 1 스케일 깊이 값을 사용합니다.
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp> // 
+#include <glm/gtc/matrix_transform.hpp> // MVP 변환 행렬을 만들기 위해 사용합니다. glm/gtc/matrix_transform.hpp 헤더는 glm::rotate와 같은 모델 변환, glm::lookAt와 같은 보기 변환 및 glm::perspective와 같은 투영 변환을 생성하는 데 사용할 수 있는 함수를 노출합니다. GLM_FORCE_RADIANS 정의는 가능한 혼동을 피하기 위해 glm::rotate와 같은 함수가 라디안을 인수로 사용하도록 하는 데 필요합니다.
+
 
 #include <iostream>         // 
 #include <fstream>          // 셰이더 소스를 읽기 위함
 #include <stdexcept>        // 예외처리
 #include <algorithm>        // std::clamp 사용
-#include <chrono>           // 
-#include <vector>           // 
+#include <chrono>           // MVP 변환 행렬을 만들때 시간에 따른 회전량을 부여하기 위해 사용합니다. 크로노 표준 라이브러리 헤더는 정확한 시간 기록을 수행하는 기능을 제공합니다. 이를 사용하여 프레임 속도에 관계없이 지오메트리가 초당 90도 회전하도록 합니다.
+#include <vector>           // 배열 대신 여러 버퍼 보관시 사용
 #include <cstring>          // strcmp 사용
 #include <cstdlib>          // EXIT_SUCCESS, EXIT_FAILURE 매크로
 #include <cstdint>          // uint32_t 사용
@@ -169,8 +170,8 @@ struct Vertex
 // 1. 파이프라인 생성 중 디스크립터 레이아웃 지정
 // 2. 디스크립터 풀에서 디스크립터 세트 할당
 // 3. 렌더링 중 디스크립터 세트 바인딩
-// 디스크립터 레이아웃은 렌더 패스가 액세스할 첨부 유형을 지정하는 것처럼 파이프라인에서 액세스할 리소스 유형을 지정합니다. 프레임 버퍼가 렌더 패스 첨부 파일에 바인딩할 실제 이미지 뷰를 지정하는 것처럼 디스크립터 세트는 디스크립터에 바인딩될 실제 버퍼 또는 이미지 리소스를 지정합니다. 그런 다음 디스크립터 세트는 버텍스 버퍼 및 프레임 버퍼와 마찬가지로 그리기 명령에 바인딩됩니다. 디스크립터에는 많은 유형이 있지만 이 장에서는 UBO(Uniform Buffer Objects)로 작업합니다. 다음 장에서 다른 유형의 디스크립터를 살펴보겠지만 기본 프로세스는 동일합니다. 정점 셰이더가 다음과 같이 C 구조체에 갖고자 하는 데이터가 있다고 가정해 보겠습니다. 그런 다음 데이터를 VkBuffer인 uniformBuffers에 복사하고 버텍스 셰이더에서 유티폰 버퍼 오브젝트 디스크립터를 통해 데이터에 액세스할 수 있습니다. GLM 데이터 유형을 사용하여 셰이더의 변수 유형과 정확히 일치시킬 수 있습니다. 행렬 데이터는 셰이더가 사용하는 방식과 이진 데이터 그대로 호환 가능하므로 나중에 UniformBufferObject를 VkBuffer에 memcpy할 수 있습니다. 모든 버텍스 속성과 해당 location 인덱스에 대해 수행해야 했던 것처럼 파이프라인 생성을 위해 셰이더에 사용된 모든 디스크립터 바인딩에 대한 세부 정보를 제공해야 합니다. createDescriptorSetLayout이라는 이 모든 정보를 정의하는 새 함수를 설정합니다. 파이프라인 생성 직전에 호출해야 하므로 파이프라인에서 필요합니다.
-struct UniformBufferObject @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+// 디스크립터 레이아웃은 렌더 패스가 액세스할 첨부 유형을 지정하는 것처럼 파이프라인에서 액세스할 리소스 유형을 지정합니다. 프레임 버퍼가 렌더 패스 첨부 파일에 바인딩할 실제 이미지 뷰를 지정하는 것처럼 디스크립터 세트는 디스크립터에 바인딩될 실제 버퍼 또는 이미지 리소스를 지정합니다. 그런 다음 디스크립터 세트는 버텍스 버퍼 및 프레임 버퍼와 마찬가지로 그리기 명령에 바인딩됩니다. 디스크립터에는 많은 유형이 있지만 이 장에서는 UBO(Uniform Buffer Objects)로 작업합니다. 다음 장에서 다른 유형의 디스크립터를 살펴보겠지만 기본 프로세스는 동일합니다. 정점 셰이더가 다음과 같이 C 구조체에 갖고자 하는 데이터가 있다고 가정해 보겠습니다. 그런 다음 데이터를 VkBuffer인 uniformBuffers에 복사하고 버텍스 셰이더에서 유티폰 버퍼 오브젝트 디스크립터를 통해 데이터에 액세스할 수 있습니다. GLM 데이터 유형을 사용하여 셰이더의 변수 유형과 정확히 일치시킬 수 있습니다. 행렬 데이터는 셰이더가 사용하는 방식과 이진 데이터 그대로 호환 가능하므로 나중에 UniformBufferObject를 VkBuffer에 memcpy할 수 있습니다.
+struct UniformBufferObject
 {
     alignas(16) glm::mat4 model;
     alignas(16) glm::mat4 view;
@@ -218,7 +219,7 @@ private:
     std::vector<VkFramebuffer> swapChainFramebuffers;   // 스왑 체인용 프레임 버퍼들의 핸들 모음
 
     VkRenderPass renderPass;                            // 렌더 패스 핸들
-    VkDescriptorSetLayout descriptorSetLayout;          // 
+    VkDescriptorSetLayout descriptorSetLayout;          // 디스크립터 셋 레이아웃 핸들 (유니폼 버퍼를 바인딩하는데 사용). 모든 디스크립터 바인딩은 하나의 VkDescriptorSetLayout 개체와 결합됩니다.
     VkPipelineLayout pipelineLayout;                    // 파이프라인 레이아웃 핸들
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
@@ -230,8 +231,9 @@ private:
     VkBuffer indexBuffer;                               // 인덱스 버퍼
     VkDeviceMemory indexBufferMemory;                   // 인덱스 버퍼가 들어있는 실제 메모리의 핸들
 
-    std::vector<VkBuffer> uniformBuffers;               // 
-    std::vector<VkDeviceMemory> uniformBuffersMemory;   // 
+    // 다음 장에서는 셰이더를 위해 UBO 데이터가 포함된 버퍼를 자세히 정의할 것입니다. 매 프레임마다 새로운 데이터를 유니폼 버퍼에 복사할 것이므로 스테이징 버퍼를 갖는 것은 의미가 없습니다. 이 경우 불필요한 오버헤드를 추가하고 성능을 개선하는 대신 오히려 성능을 저하시킬 수 있습니다. 여러 프레임이 동시에 비행 중일 수 있고 이전 프레임이 여전히 읽고 있는 동안 다음 프레임을 준비하기 위해 버퍼를 업데이트하고 싶지 않기 때문에 여러 버퍼가 있어야 합니다! 따라서 비행 중인 프레임 수만큼 균일한 버퍼가 필요하고 현재 GPU 에서 읽고 있지 않는 유니폼 버퍼에 기록해야 합니다.
+    std::vector<VkBuffer> uniformBuffers;               // 유니폼 버퍼 
+    std::vector<VkDeviceMemory> uniformBuffersMemory;   // 그래픽카드 메모리에 담긴 유니폼 버퍼
 
     VkDescriptorPool descriptorPool;                    // 
     std::vector<VkDescriptorSet> descriptorSets;        // 
@@ -331,7 +333,7 @@ private:
 
         createIndexBuffer();            // 2-13. 인덱스 버퍼 생성
 
-        createUniformBuffers();         // 2-14. 
+        createUniformBuffers();         // 2-14. 유니폼 버퍼 생성
 
         createDescriptorPool();         // 2-15. 
 
@@ -1102,11 +1104,15 @@ private:
     // 2-8. 디스크립터 셋 레이아웃 생성 (여기선 유니폼 버퍼를 처리하기 위함)
     inline void createDescriptorSetLayout()
     {
+        // 버텍스 셰이더를 사용할때 각각의 버텍스 속성에 대해 해당하는 location 인덱스 ID 를 정의해야 했던 것처럼 파이프라인 생성을 위해서도 셰이더에 사용된 모든 디스크립터 바인딩에 대한 세부 정보를 제공해야 합니다. createDescriptorSetLayout이라는 이 모든 정보를 정의하는 새 함수를 설정합니다. 파이프라인 생성 직전에 이러한 것들이 준비되어야 합니다. 모든 바인딩은 VkDescriptorSetLayoutBinding 구조체를 통해 설명되어야 합니다.
+        // 처음 두 필드는 binding 을 정의하는 것으로써, 셰이더에 사용될 유니폼 버퍼 객체와 디스크립터 유형을 지정합니다. 셰이더 변수는 유니폼 버퍼 객체의 배열을 나타낼 수 있으며 descriptorCount는 배열의 값 갯수를 지정합니다. 예를 들면, 이것은 스켈레톤 애니메이션을 위한 스켈레톤의 각 본에 대한 변환을 지정하는 데 사용할 수 있습니다. MVP 변환은 단일 유니폼 버퍼 개체로 표현 가능하므로 descriptorCount 1개만 사용하고 있습니다.
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorCount = 1;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        // pImmutableSamplers 필드는 이미지 샘플링 관련 설명자에만 관련이 있으며 나중에 살펴보겠습니다. 기본값으로 그대로 둘 수 있습니다.
         uboLayoutBinding.pImmutableSamplers = nullptr;
+        // 또한 디스크립터가 참조할 셰이더 스테이지를 지정해야 합니다. stageFlags 필드는 VkShaderStageFlagBits 값들의 조합 또는 VK_SHADER_STAGE_ALL_GRAPHICS 값이 될 수 있습니다. 우리는 현재 버텍스 셰이더의 디스크립터만 참조합니다.
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
@@ -1114,7 +1120,9 @@ private:
         layoutInfo.bindingCount = 1;
         layoutInfo.pBindings = &uboLayoutBinding;
 
-        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+        // 그런 다음 vkCreateDescriptorSetLayout을 사용하여 생성할 수 있습니다. 이 함수는 바인딩 배열과 함께 간단한 VkDescriptorSetLayoutCreateInfo를 허용합니다.
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
+        {
             throw std::runtime_error("failed to create descriptor set layout!");
         }
     }
@@ -1318,8 +1326,9 @@ private:
         // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 버텍스 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1; // @@@@@@@@@@@@@@@@@
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // @@@@@@@@@@@@@@@
+        // 셰이더가 사용할 디스크립터를 Vulkan에 알리기 위해 파이프라인 생성 중에 디스크립터 세트 레이아웃을 지정해야 합니다. 디스크립터 세트 레이아웃은 파이프라인 레이아웃 개체에 함께 지정됩니다. 우리가 만든 디스크립터 세트 레이아웃 개체를 참조하도록 setLayoutCount 갯수와 pSetLayouts 를 수정합니다. 하나의 디스크립터 세트에 이미 모든 바인딩이 포함되어 있기 때문에 여기에서 여러개의 디스크립터 세트 레이아웃을 지정할 수 있는 이유에 대해 궁금할 것입니다. 다음 장에서 설명자 풀과 설명자 집합에 대해 다시 살펴보겠습니다.
+        pipelineLayoutInfo.setLayoutCount = 1; // 디스크립터 세트 레이아웃 1개 들어가므로
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // 디스크립터 세트 레이아웃
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -1562,7 +1571,7 @@ private:
 
 
 
-    // @@@@@@@
+    // 2-14. 유니폼 버퍼 생성
     inline void createUniformBuffers()
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -1871,8 +1880,10 @@ private:
             throw std::runtime_error("Failed to acquire swap chain image!");
         }
 
-        // @@@@@@@@@@@@@
+
+        // 다음 프레임을 제출하기 전에 새 함수 updateUniformBuffer를 호출합니다. 이 함수는 매 프레임마다 새로운 변환을 생성하여 지오메트리를 회전시킵니다. 이 기능을 구현하려면 두 개의 새 헤더를 포함해야 합니다. glm/glm.hpp, glm/gtc/matrix_transform.hpp, chrono
         updateUniformBuffer(currentFrame);
+
 
         // 대기 후 vkResetFences를 사용하여 수동으로 펜스를 unsignaled 상태로 재설정해야 합니다.
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
@@ -1973,20 +1984,26 @@ private:
         createFramebuffers();
     }
 
-    // @@@@@@@@@@@@
+    // 버텍스 셰이더로 전달할 유니폼 버퍼(MVP 변환행렬) 업데이트
     HELPER_FUNCTION void updateUniformBuffer(uint32_t currentImage)
     {
+        // updateUniformBuffer 함수는 렌더링이 부동 소수점 정확도로 시작된 이후 시간을 초 단위로 계산하는 몇 가지 논리로 시작됩니다. 이제 유니폼 버퍼 개체에서 모델, 보기 및 투영 변환을 정의합니다. 모델 회전은 시간 변수를 사용하여 Z축을 중심으로 간단히 회전합니다.
         static auto startTime = std::chrono::high_resolution_clock::now();
 
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo{};
+        // glm::rotate 함수는 기존 변형, 회전 각도 및 회전 축을 매개변수로 사용합니다. glm::mat4(1.0f) 생성자는 단위 행렬을 반환합니다. time * glm::radians(90.0f) 회전 각도를 사용하여 초당 90도 회전을 합니다.
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        // 뷰 변환을 위해 위에서 45도 각도로 지오메트리를 보기로 결정했습니다. glm::lookAt 함수는 눈 위치, 중심 위치 및 위쪽 축을 매개변수로 사용합니다.
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        // 저는 45도 수직 시야각으로 원근 투영을 사용하기로 선택했습니다. 다른 매개변수는 종횡비, 근거리 및 원거리 보기 평면입니다. 크기 조정 후 창의 새 너비와 높이를 고려하려면 현재 스왑 체인 범위를 사용하여 종횡비를 계산하는 것이 중요합니다.
         ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+        // GLM은 원래 클립 좌표의 Y 좌표가 반전되는 OpenGL용으로 설계되었습니다. 이를 보상하는 가장 쉬운 방법은 투영 행렬에서 Y축의 배율 인수에서 부호를 뒤집는 것입니다. 이렇게 하지 않으면 이미지가 거꾸로 렌더링됩니다.
         ubo.proj[1][1] *= -1;
 
+        // 이제 모든 변환이 정의되었으므로 유니폼 버퍼 개체의 데이터를 현재 유니폼 버퍼에 복사할 수 있습니다. 이것은 스테이징 버퍼가 없는 것을 제외하고 정점 버퍼에 대해 했던 것과 똑같은 방식으로 발생합니다. 이런 식으로 UBO를 사용하여 자주 변경되는 값을 셰이더에 전달하는 것은 최고로 효율적인 방법은 아닙니다. 작은 데이터 버퍼를 셰이더에 전달하는 더 효율적인 방법은 푸시 상수를 이용하는 것입니다. 우리는 미래에 이것들을 살펴볼 것입니다. 다음 장에서는 셰이더가 이 변환 데이터에 액세스할 수 있도록 VkBuffers를 균일 버퍼 설명자에 실제로 바인딩하는 설명자 세트를 살펴보겠습니다.
         void* data;
         vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
         memcpy(data, &ubo, sizeof(ubo));
@@ -2091,7 +2108,7 @@ private:
         // 스왑 체인을 다시 만들기 위해 이전 버전을 정리합니다.
         cleanupSwapChain();
 
-        // 
+        // 매 프레임마다 새로운 변환으로 유니폼 버퍼를 업데이트하는 별도의 함수를 작성할 것이므로 여기에는 vkMapMemory가 없습니다. 유니폼 데이터는 모든 그리기 호출에 사용되므로 이를 포함하는 버퍼는 렌더링을 중지할 때만 파괴되어야 합니다.
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             vkDestroyBuffer(device, uniformBuffers[i], nullptr);
@@ -2101,7 +2118,7 @@ private:
         // 
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-        // 
+        // 디스크립터 세트 레이아웃은 프로그램이 끝날 때까지 새 그래픽 파이프라인을 생성하는 동안 계속 유지되어야 합니다.
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
         // 물론 C++의 동적 메모리 할당과 마찬가지로 메모리는 어느 시점에선 해제되어야 합니다. 버퍼 객체에 묶인 메모리는 버퍼가 더 이상 사용되지 않으면 해제될 수 있으므로 버퍼가 파괴된 후에 해제하도록 합니다. 버퍼는 프로그램이 끝날 때까지 명령을 렌더링하는 데 사용할 수 있어야 하며 스왑 체인에 의존하지 않으므로 cleanup()에서 정리 하였습니다.

@@ -63,7 +63,7 @@ void main()
 	// https://vulkan-tutorial.com/Uniform_buffers/Descriptor_pool_and_sets
 	// (ubo 유니폼 버퍼가 담긴 디스크립터 풀) 을 묶은 디스크립터 셋이 바인딩 되어 있어야 에러 없이 실행됨 !!
 	// 우리는 이전 장의 직사각형이 3D에서 회전하도록 매 프레임마다 모델, 보기 및 투영 행렬을 업데이트하여 클립 좌표계에서의 위치를 구하고 gl_Position 로 반환할 것입니다.
-	// 클립 좌표계이므로 맨 마지막 요소로 inPosition 에 추가된 1.0 는 나중에 퍼스펙티브 프로젝션(원근 뷰)에 사용하기 위한 나누기 요소로 쓰여서 가까이 있는 오브젝트를 크게 보여주고 멀리 있는 오브젝트는 작게 보이도록 해줍니다.
+	// 클립 좌표계이므로 맨 마지막 요소로 vec4(inPosition, 0.0, 1.0) 에 추가된 1.0 는 나중에 퍼스펙티브 프로젝션(원근 뷰)에 사용하기 위한 나누기 요소로 쓰여서 가까이 있는 오브젝트를 크게 보여주고 멀리 있는 오브젝트는 작게 보이도록 해줍니다.
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0);
     fragColor = inColor;
 }
