@@ -58,7 +58,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)EXTERNALS\VulkanSDK_1.3.211.0\Include;$(SolutionDir)EXTERNALS\GLM;$(SolutionDir)EXTERNALS\GLFW64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)EXTERNALS\VulkanSDK_1.3.211.0\Include;$(SolutionDir)EXTERNALS\GLM;$(SolutionDir)EXTERNALS\GLFW64\include;$(SolutionDir)EXTERNALS\STB;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <DisableLanguageExtensions>true</DisableLanguageExtensions>
       <LanguageStandard_C>stdc17</LanguageStandard_C>

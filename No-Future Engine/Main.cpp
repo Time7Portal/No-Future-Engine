@@ -6,6 +6,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp> // MVP 변환 행렬을 만들기 위해 사용합니다. glm/gtc/matrix_transform.hpp 헤더는 glm::rotate와 같은 모델 변환, glm::lookAt와 같은 보기 변환 및 glm::perspective와 같은 투영 변환을 생성하는 데 사용할 수 있는 함수를 노출합니다. GLM_FORCE_RADIANS 정의는 가능한 혼동을 피하기 위해 glm::rotate와 같은 함수가 라디안을 인수로 사용하도록 하는 데 필요합니다.
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h> // 이미지 로딩을 위한 라이브러리
+
 
 #include <iostream>         // 
 #include <fstream>          // 셰이더 소스를 읽기 위함
@@ -232,6 +235,9 @@ private:
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
+
+    VkImage textureImage;                               // @@@
+    VkDeviceMemory textureImageMemory;                  // @@@
     
     VkBuffer vertexBuffer;                              // 버텍스 버퍼
     VkDeviceMemory vertexBufferMemory;                  // 버텍스 버퍼가 들어있는 실제 메모리의 핸들
@@ -336,6 +342,8 @@ private:
         createFramebuffers();           // 2-10. 프레임 버퍼들을 생성
 
         createCommandPool();            // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
+
+        createTextureImage();           // @@@
 
         createVertexBuffer();           // 2-12. 버텍스 버퍼 생성
 
@@ -1505,6 +1513,156 @@ private:
 
 
 
+    // @@@
+    void createTextureImage()
+    {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load("Textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        VkDeviceSize imageSize = texWidth * texHeight * 4;
+
+        if (!pixels)
+        {
+            throw std::runtime_error("Failed to load texture image!");
+        }
+
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+        void* data;
+        vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, pixels, static_cast<size_t>(imageSize));
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        stbi_image_free(pixels);
+
+        createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
+
+        transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
+    HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+    {
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = width;
+        imageInfo.extent.height = height;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = format;
+        imageInfo.tiling = tiling;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = usage;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create image!");
+        }
+
+        VkMemoryRequirements memRequirements;
+        vkGetImageMemoryRequirements(device, image, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to allocate image memory!");
+        }
+
+        vkBindImageMemory(device, image, imageMemory, 0);
+    }
+
+    HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+    {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        VkPipelineStageFlags sourceStage;
+        VkPipelineStageFlags destinationStage;
+
+        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else
+        {
+            throw std::invalid_argument("unsupported layout transition!");
+        }
+
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            sourceStage, destinationStage,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+
+        endSingleTimeCommands(commandBuffer);
+    }
+
+    HELPER_FUNCTION void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+    {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkBufferImageCopy region{};
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.mipLevel = 0;
+        region.imageSubresource.baseArrayLayer = 0;
+        region.imageSubresource.layerCount = 1;
+        region.imageOffset = { 0, 0, 0 };
+        region.imageExtent = {
+            width,
+            height,
+            1
+        };
+
+        vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        endSingleTimeCommands(commandBuffer);
+    }
+
+
+
     // 2-12. 버텍스 버퍼 생성
     // Vulkan의 버퍼는 그래픽 카드에서 읽을 수 있는 임의의 데이터를 저장하는 데 사용되는 메모리 영역입니다. 그것들은 버텍스 데이터를 저장하는 데 사용할 수 있으며, 물론 다른 많은 목적으로도 사용할 수 있습니다. 지금까지 다루었던 Vulkan 객체들과 달리 버퍼는 자동으로 메모리를 할당하지 않습니다. Vulkan API는 프로그래머가 거의 모든 것을 제어할 수 있도록 던져주며 메모리 관리는 그 중에 하나입니다.
     inline void createVertexBuffer()
@@ -1719,6 +1877,20 @@ private:
     // 한 버퍼에서 다른 버퍼로 내용을 복사하는 함수
     HELPER_FUNCTION void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     {
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        // 버퍼의 내용은 vkCmdCopyBuffer 명령을 사용하여 전송됩니다. 소스 및 대상(목적지) 버퍼를 인수로 사용하고 복사할 영역 배열을 사용합니다. 영역은 VkBufferCopy 구조체에 정의되며 소스 버퍼 오프셋, 대상(목적지) 버퍼 오프셋 및 크기로 구성됩니다. vkMapMemory 명령과 달리 여기에선 copyRegion.size에 VK_WHOLE_SIZE를 지정할 수 없습니다.
+        VkBufferCopy copyRegion{};
+        //copyRegion.srcOffset = 0; // Optional
+        //copyRegion.dstOffset = 0; // Optional
+        copyRegion.size = size;
+        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+        endSingleTimeCommands(commandBuffer);
+    }
+
+    HELPER_FUNCTION VkCommandBuffer beginSingleTimeCommands()
+    {
         // 메모리 전송 작업은 그리기 명령과 마찬가지로 명령 버퍼를 사용하여 실행됩니다. 따라서 반드시 먼저 임시 명령 버퍼를 먼저 할당해야 합니다. 또한 이러한 임시 명령 버퍼들을 위해 별도의 커맨드 풀을 만드는 것도 좋습니다. 이러한 구현이 메모리 할당 최적화를 적용할 수 있기 때문입니다. 이 경우 명령 풀 생성에 VK_COMMAND_POOL_CREATE_TRANSIENT_BIT 플래그를 사용하는 것이 좋습니다.
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1736,13 +1908,11 @@ private:
 
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-        // 버퍼의 내용은 vkCmdCopyBuffer 명령을 사용하여 전송됩니다. 소스 및 대상(목적지) 버퍼를 인수로 사용하고 복사할 영역 배열을 사용합니다. 영역은 VkBufferCopy 구조체에 정의되며 소스 버퍼 오프셋, 대상(목적지) 버퍼 오프셋 및 크기로 구성됩니다. vkMapMemory 명령과 달리 여기에선 copyRegion.size에 VK_WHOLE_SIZE를 지정할 수 없습니다.
-        VkBufferCopy copyRegion{};
-        //copyRegion.srcOffset = 0; // Optional
-        //copyRegion.dstOffset = 0; // Optional
-        copyRegion.size = size;
-        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+        return commandBuffer;
+    }
 
+    HELPER_FUNCTION void endSingleTimeCommands(VkCommandBuffer commandBuffer)
+    {
         // 이 명령 버퍼에는 복사 명령만 포함되어 있으므로 그 직후에 기록을 중지할 수 있습니다. 이제 명령 버퍼를 실행하여 전송을 완료합니다.
         vkEndCommandBuffer(commandBuffer);
 
@@ -2147,6 +2317,10 @@ private:
 
         // 디스크립터 풀이 파괴되면 디스크립터 세트는 자동으로 소멸되므로 디스크립터 세트를 명시적으로 정리할 필요가 없습니다. vkAllocateDescriptorSets에 대한 호출은 각각 하나의 유니폼 버퍼 디스크립터가 있는 디스크립터 세트를 할당합니다.
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+
+        // @@@
+        vkDestroyImage(device, textureImage, nullptr);
+        vkFreeMemory(device, textureImageMemory, nullptr);
 
         // 디스크립터 세트 레이아웃은 프로그램이 끝날 때까지 새 그래픽 파이프라인을 생성하는 동안 계속 유지되어야 합니다.
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
