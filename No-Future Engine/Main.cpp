@@ -171,6 +171,14 @@ struct Vertex
 // 2. 디스크립터 풀에서 디스크립터 세트 할당
 // 3. 렌더링 중 디스크립터 세트 바인딩
 // 디스크립터 레이아웃은 렌더 패스가 액세스할 첨부 유형을 지정하는 것처럼 파이프라인에서 액세스할 리소스 유형을 지정합니다. 프레임 버퍼가 렌더 패스 첨부 파일에 바인딩할 실제 이미지 뷰를 지정하는 것처럼 디스크립터 세트는 디스크립터에 바인딩될 실제 버퍼 또는 이미지 리소스를 지정합니다. 그런 다음 디스크립터 세트는 버텍스 버퍼 및 프레임 버퍼와 마찬가지로 그리기 명령에 바인딩됩니다. 디스크립터에는 많은 유형이 있지만 이 장에서는 UBO(Uniform Buffer Objects)로 작업합니다. 다음 장에서 다른 유형의 디스크립터를 살펴보겠지만 기본 프로세스는 동일합니다. 정점 셰이더가 다음과 같이 C 구조체에 갖고자 하는 데이터가 있다고 가정해 보겠습니다. 그런 다음 데이터를 VkBuffer인 uniformBuffers에 복사하고 버텍스 셰이더에서 유티폰 버퍼 오브젝트 디스크립터를 통해 데이터에 액세스할 수 있습니다. GLM 데이터 유형을 사용하여 셰이더의 변수 유형과 정확히 일치시킬 수 있습니다. 행렬 데이터는 셰이더가 사용하는 방식과 이진 데이터 그대로 호환 가능하므로 나중에 UniformBufferObject를 VkBuffer에 memcpy할 수 있습니다.
+// Vulkan은 구조의 데이터가 특정 방식으로 메모리에 정렬될 것으로 예상합니다. 예를 들면 다음과 같습니다.
+// 1. 스칼라는 N (32비트 부동 소수점이 주어진 경우 = 4바이트) 으로 정렬되어야 합니다.
+// 2. vec2는 2N (= 8바이트) 으로 정렬되어야 합니다.
+// 3. vec3 또는 vec4는 4N (= 16바이트) 으로 정렬되어야 합니다.
+// 4. 중첩 구조는 16의 배수로 반올림된 해당 멤버의 base alignment로 정렬되어야 합니다.
+// 5. mat4 행렬은 vec4와 동일한 정렬을 가져야 합니다.
+// https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/chap15.html#interfaces-resources-layout 에서 정렬 요구 사항의 상세 내용을 찾을 수 있습니다.
+// mat4 필드가 3개뿐인 우리가 만든 셰이더는 이미 정렬 요구 사항을 충족했습니다. 각 mat4의 크기는 4 x 4 x 4 = 64바이트이고 model의 오프셋은 0이고 view의 오프셋은 64이고 proj의 오프셋은 128입니다. 이 모든 항목은 16의 배수이므로 제대로 작동했습니다. 특별한 경우 (예를들면 맨 앞에 8바이트 vec2 가 온다던지) 에서 정렬 문제를 해결하기 위해 C++11 에 도입된 alignas 지정자를 사용하여 명시적으로 정렬할 수도 있습니다. 다행히 대부분의 경우 이러한 정렬 요구 사항에 대해 생각할 필요가 없는 간편한 방법도 있습니다. GLM 헤더를 인클루드 하기 직전에 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES 를 정의하는 것입니다. 이렇게 하면 GLM이 이미 지정된 정렬 요구 사항이 있는 vec2 및 mat4 버전을 사용하게 됩니다. 이 정의를 추가하면 alignas() 지정자를 제거할 수 있습니다. 불행히도 이 방법은 중첩 구조체(nested structure)를 사용하기 시작하면 고장날 수 있다는 단점이 있습니다. C++ 코드에서 다음과 같은 상황을 고려하십시오. - https://vulkan-tutorial.com/Uniform_buffers/Descriptor_pool_and_sets 이러한 문제는 항상 정렬에 대해 명시적이어야 하는 좋은 이유입니다. 그렇게 하면 정렬 오류의 이상한 증상에 당황하지 않을 것입니다.
 struct UniformBufferObject
 {
     alignas(16) glm::mat4 model;
@@ -231,7 +239,7 @@ private:
     VkBuffer indexBuffer;                               // 인덱스 버퍼
     VkDeviceMemory indexBufferMemory;                   // 인덱스 버퍼가 들어있는 실제 메모리의 핸들
 
-    // 다음 장에서는 셰이더를 위해 UBO 데이터가 포함된 버퍼를 자세히 정의할 것입니다. 매 프레임마다 새로운 데이터를 유니폼 버퍼에 복사할 것이므로 스테이징 버퍼를 갖는 것은 의미가 없습니다. 이 경우 불필요한 오버헤드를 추가하고 성능을 개선하는 대신 오히려 성능을 저하시킬 수 있습니다. 여러 프레임이 동시에 비행 중일 수 있고 이전 프레임이 여전히 읽고 있는 동안 다음 프레임을 준비하기 위해 버퍼를 업데이트하고 싶지 않기 때문에 여러 버퍼가 있어야 합니다! 따라서 비행 중인 프레임 수만큼 균일한 버퍼가 필요하고 현재 GPU 에서 읽고 있지 않는 유니폼 버퍼에 기록해야 합니다.
+    // 다음 장에서는 셰이더를 위해 UBO 데이터가 포함된 버퍼를 자세히 정의할 것입니다. 매 프레임마다 새로운 데이터를 유니폼 버퍼에 복사할 것이므로 스테이징 버퍼를 갖는 것은 의미가 없습니다. 이 경우 불필요한 오버헤드를 추가하고 성능을 개선하는 대신 오히려 성능을 저하시킬 수 있습니다. 여러 프레임이 동시에 비행 중일 수 있고 이전 프레임이 여전히 읽고 있는 동안 다음 프레임을 준비하기 위해 버퍼를 업데이트하고 싶지 않기 때문에 여러 버퍼가 있어야 합니다! 따라서 비행 중인 프레임 수만큼 유니폼 버퍼가 필요하고 현재 GPU 에서 읽고 있지 않는 유니폼 버퍼에 기록해야 합니다.
     std::vector<VkBuffer> uniformBuffers;               // 유니폼 버퍼 
     std::vector<VkDeviceMemory> uniformBuffersMemory;   // 그래픽카드 메모리에 담긴 유니폼 버퍼
 
@@ -335,9 +343,9 @@ private:
 
         createUniformBuffers();         // 2-14. 유니폼 버퍼 생성
 
-        createDescriptorPool();         // 2-15. 
+        createDescriptorPool();         // 2-15. 디스크립터 풀 생성
 
-        createDescriptorSets();         // 2-16. 
+        createDescriptorSets();         // 2-16. 디스크립터 셋 생성
 
         createCommandBuffers();         // 2-17. 그래픽 카드로 보낼 커맨드 버퍼 생성
 
@@ -1105,12 +1113,12 @@ private:
     inline void createDescriptorSetLayout()
     {
         // 버텍스 셰이더를 사용할때 각각의 버텍스 속성에 대해 해당하는 location 인덱스 ID 를 정의해야 했던 것처럼 파이프라인 생성을 위해서도 셰이더에 사용된 모든 디스크립터 바인딩에 대한 세부 정보를 제공해야 합니다. createDescriptorSetLayout이라는 이 모든 정보를 정의하는 새 함수를 설정합니다. 파이프라인 생성 직전에 이러한 것들이 준비되어야 합니다. 모든 바인딩은 VkDescriptorSetLayoutBinding 구조체를 통해 설명되어야 합니다.
-        // 처음 두 필드는 binding 을 정의하는 것으로써, 셰이더에 사용될 유니폼 버퍼 객체와 디스크립터 유형을 지정합니다. 셰이더 변수는 유니폼 버퍼 객체의 배열을 나타낼 수 있으며 descriptorCount는 배열의 값 갯수를 지정합니다. 예를 들면, 이것은 스켈레톤 애니메이션을 위한 스켈레톤의 각 본에 대한 변환을 지정하는 데 사용할 수 있습니다. MVP 변환은 단일 유니폼 버퍼 개체로 표현 가능하므로 descriptorCount 1개만 사용하고 있습니다.
+        // 처음 두 필드는 binding 을 정의하는 것으로써, 셰이더에 사용될 유니폼 버퍼 객체와 디스크립터 유형을 지정합니다. 셰이더 변수는 유니폼 버퍼 객체의 배열을 나타낼 수 있으며 descriptorCount는 배열의 값 갯수를 지정합니다. 예를 들면, 이것은 스켈레톤 애니메이션을 위한 스켈레톤의 각 본에 대한 변환을 지정하는 데 사용할 수 있습니다. MVP 변환은 하나의 유니폼 버퍼 개체로 표현 가능하므로 descriptorCount 1개만 사용하고 있습니다.
         VkDescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorCount = 1;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        // pImmutableSamplers 필드는 이미지 샘플링 관련 설명자에만 관련이 있으며 나중에 살펴보겠습니다. 기본값으로 그대로 둘 수 있습니다.
+        // pImmutableSamplers 필드는 이미지 샘플링 관련 디스크립터에만 관련이 있으며 나중에 살펴보겠습니다. 기본값으로 그대로 둘 수 있습니다.
         uboLayoutBinding.pImmutableSamplers = nullptr;
         // 또한 디스크립터가 참조할 셰이더 스테이지를 지정해야 합니다. stageFlags 필드는 VkShaderStageFlagBits 값들의 조합 또는 VK_SHADER_STAGE_ALL_GRAPHICS 값이 될 수 있습니다. 우리는 현재 버텍스 셰이더의 디스크립터만 참조합니다.
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -1252,7 +1260,8 @@ private:
         rasterizer.lineWidth = 1.0f;
         // 표면 컬링 유형을 결정합니다. 컬링을 비활성화하거나, 앞면을 컬링하거나, 뒷면을 컬링하거나, 둘 모두를 컬링할 수 있습니다. frontFace 변수는 정면으로 간주되는 면의 버텍스 순서를 지정하며 시계 방향 (왼손 중심) 또는 시계 반대 방향 (오른손 중심) 일 수 있습니다.
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // @@@@@@@@@@@
+        // 지금 프로그램을 실행하면 불행히도 아무 것도 보이지 않는다는 것을 알게 될 것입니다. 문제는 투영 행렬에서 Y 플립을 수행했기 때문에 (GLM 사용을 위해) 정점이 이제 시계 방향 대신 시계 반대 방향으로 그려지고 있다는 것입니다.이로 인해 후면 컬링이 시작되고 형상이 그려지지 않습니다. createGraphicsPipeline 함수로 이동하고 VkPipelineRasterizationStateCreateInfo 에서 frontFace를 수정하여 다음을 수정합니다.
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; 
         // 바이어스 값을 사용하여 (상수를 더해) 깊이 값을 계산합니다. 이것은 때때로 그림자 매핑에 사용되지만 우리는 사용하지 않을 것입니다. depthBiasEnable을 VK_FALSE로 설정하기만 하면 됩니다.
         rasterizer.depthBiasEnable = VK_FALSE;
         rasterizer.depthBiasConstantFactor = 0.0f; // Optional
@@ -1326,7 +1335,7 @@ private:
         // 셰이더에서 uniform 값을 사용할 수 있습니다. 이는 동적 상태 변수와 유사한 전역 변수로, 드로잉 시 변경할 수 있어 셰이더를 다시 생성하지 않고도 셰이더의 동작을 변경할 수 있습니다. 변환 행렬을 버텍스 셰이더에 전달하거나 프래그먼트 셰이더에서 텍스처 샘플러를 만드는 데 일반적으로 사용됩니다. 이러한 uniform 값은 VkPipelineLayout 객체를 생성하여 파이프라인 생성 중에 지정해야 합니다.다음 장까지 사용하지 않겠지만 여전히 빈 파이프라인 레이아웃을 만들어야 합니다. 이 구조는 또한 푸시 상수를 지정하는데, 이는 동적 값을 셰이더에 전달하는 또 다른 방법이며, 이는 향후 장에서 다룰 것입니다.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        // 셰이더가 사용할 디스크립터를 Vulkan에 알리기 위해 파이프라인 생성 중에 디스크립터 세트 레이아웃을 지정해야 합니다. 디스크립터 세트 레이아웃은 파이프라인 레이아웃 개체에 함께 지정됩니다. 우리가 만든 디스크립터 세트 레이아웃 개체를 참조하도록 setLayoutCount 갯수와 pSetLayouts 를 수정합니다. 하나의 디스크립터 세트에 이미 모든 바인딩이 포함되어 있기 때문에 여기에서 여러개의 디스크립터 세트 레이아웃을 지정할 수 있는 이유에 대해 궁금할 것입니다. 다음 장에서 설명자 풀과 설명자 집합에 대해 다시 살펴보겠습니다.
+        // 셰이더가 사용할 디스크립터를 Vulkan에 알리기 위해 파이프라인 생성 중에 디스크립터 세트 레이아웃을 지정해야 합니다. 디스크립터 세트 레이아웃은 파이프라인 레이아웃 개체에 함께 지정됩니다. 우리가 만든 디스크립터 세트 레이아웃 개체를 참조하도록 setLayoutCount 갯수와 pSetLayouts 를 수정합니다. 하나의 디스크립터 세트에 이미 모든 바인딩이 포함되어 있기 때문에 여기에서 여러개의 디스크립터 세트 레이아웃을 지정할 수 있는 이유에 대해 궁금할 것입니다. 다음 장에서 디스크립터 풀과 디스크립터 집합에 대해 다시 살펴보겠습니다.
         pipelineLayoutInfo.setLayoutCount = 1; // 디스크립터 세트 레이아웃 1개 들어가므로
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // 디스크립터 세트 레이아웃
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
@@ -1585,29 +1594,38 @@ private:
     }
 
 
-    // @@@@@@@
+
+    // 2-15. 디스크립터 풀 생성
     inline void createDescriptorPool()
     {
+        // 이전 장에 다룬 디스크립터 레이아웃은 바인딩할 수 있는 디스크립터의 유형을 설명합니다. 이 장에서 우리는 각각의 VkBuffer 자원에 대한 디스크립터 세트를 생성하여 이를 유니폼 버퍼 디스크립터에 바인딩할 것입니다. 디스크립터 세트는 직접 만들 수 없으며 명령 버퍼를 처리할때와 비슷하게 풀을 먼저 만들어 할당해야 합니다. 디스크립터 집합에 해당하는 것을 당연히 디스크립터 풀이라고 합니다. 우리는 그것을 설정하기 위해 새로운 함수 createDescriptorPool을 작성할 것입니다.
+        
+        // 먼저 VkDescriptorPoolSize 구조를 사용하여 디스크립터 세트에 포함될 디스크립터 유형과 그것이 몇 개인지 설명해야 합니다.
         VkDescriptorPoolSize poolSize{};
         poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
+        // 우리는 매 프레임마다 이러한 디스크립터들 중 하나를 할당하게 됩니다. 이 풀 크기 구조는 기본 VkDescriptorPoolCreateInfo에서 참조합니다.
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 1;
         poolInfo.pPoolSizes = &poolSize;
+        // 사용 가능한 개별 디스크립터의 최대 수 외에도 할당할 수 있는 디스크립터 집합의 최대 수도 지정해야 합니다.
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
+        // 구조에는 VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT와 같이 개별 디스크립터 세트를 해제할 수 있는지 여부를 결정하는 명령 풀과 유사한 플래그 옵션이 있습니다. 디스크립터 세트를 생성한 후에는 건드리지 않을 것이므로 이 플래그가 필요하지 않습니다. 플래그를 기본값인 0으로 둘 수 있습니다. 디스크립터 풀의 핸들을 저장할 새 클래스 멤버를 추가하고 vkCreateDescriptorPool을 호출하여 디스크립터 풀을 생성합니다.
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create descriptor pool!");
+            throw std::runtime_error("Failed to create descriptor pool!");
         }
     }
 
 
-    // @@@@@@@
+
+    // 2-16. 디스크립터 셋 생성
     inline void createDescriptorSets()
     {
+        // 이제 디스크립터 세트 자체를 할당할 수 있습니다. 그 목적을 위해 createDescriptorSets 함수를 추가하였습니다. 디스크립터 세트 할당은 VkDescriptorSetAllocateInfo 구조체로 설명됩니다. 할당할 디스크립터 풀, 할당할 디스크립터 세트 수 및 기반으로 할 디스크립터 레이아웃을 지정해야 합니다. 우리의 경우 비행 중인 각 프레임에 대해 단 하나의 디스크립터 세트를 만들고 모두 동일한 레이아웃을 사용합니다. 불행히도 vkAllocateDescriptorSets 함수가 세트 수와 일치하는 배열 크기의 데이터를 기대하기 때문에 레이아웃의 모든 복사본이 들어가야 합니다.
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1615,12 +1633,14 @@ private:
         allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         allocInfo.pSetLayouts = layouts.data();
 
+        // 디스크립터 집합 핸들을 보유할 클래스 멤버를 추가하고 vkAllocateDescriptorSets로 할당합니다.
         descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
         if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
 
+        // 디스크립터 세트는 지금 할당되었지만 그 안에 있는 디스크립터는 여전히 구성해야 합니다. 이제 모든 디스크립터를 순회하며 설정값을 채우는 루프를 추가합니다. 유니폼 버퍼 디스크립터와 같이 버퍼를 참조하는 디스크립터는 VkDescriptorBufferInfo 구조체로 구성됩니다. 이 구조체는 디스크립터에 대한 데이터를 포함하는 버퍼와 버퍼 내의 영역을 지정합니다.
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             VkDescriptorBufferInfo bufferInfo{};
@@ -1628,15 +1648,24 @@ private:
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
+            // 이 경우처럼 전체 버퍼를 덮어쓰는 경우 범위에 대해 VK_WHOLE_SIZE 값을 사용할 수도 있습니다. 디스크립터의 구성은 VkWriteDescriptorSet 구조체의 배열을 매개변수로 사용하는 vkUpdateDescriptorSets 함수를 사용하여 업데이트됩니다.
             VkWriteDescriptorSet descriptorWrite{};
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            // 처음 두 필드는 업데이트할 디스크립터 세트와 바인딩을 지정합니다. 유니폼 버퍼 바인딩 인덱스를 0으로 지정했습니다. 
             descriptorWrite.dstSet = descriptorSets[i];
             descriptorWrite.dstBinding = 0;
+            // 디스크립터는 배열이 될 수 있으므로 업데이트하려는 배열의 첫 번째 인덱스도 지정해야 합니다. 배열을 사용하지 않으므로 인덱스는 단순히 0입니다.
             descriptorWrite.dstArrayElement = 0;
+            // 디스크립터의 유형을 다시 지정해야 합니다. 인덱스 dstArrayElement에서 시작하여 배열에서 한 번에 여러 디스크립터를 업데이트할 수 있습니다.
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            // descriptorCount 필드는 업데이트하려는 배열 요소의 수를 지정합니다.
             descriptorWrite.descriptorCount = 1;
+            // 마지막 필드는 실제로 디스크립터를 구성하는 descriptorCount 구조체가 있는 배열을 참조합니다. 세 가지 중 실제로 사용해야 하는 디스크립터의 유형에 따라 다릅니다. pBufferInfo 필드는 버퍼 데이터를 참조하는 디스크립터에 사용되며 pImageInfo는 이미지 데이터를 참조하는 디스크립터에 사용되며 pTexelBufferView는 버퍼 뷰를 참조하는 디스크립터에 사용됩니다. 디스크립터는 버퍼를 기반으로 하므로 pBufferInfo를 사용합니다.
             descriptorWrite.pBufferInfo = &bufferInfo;
+            descriptorWrite.pImageInfo = nullptr; // Optional
+            descriptorWrite.pTexelBufferView = nullptr; // Optional
 
+            // 업데이트는 vkUpdateDescriptorSets를 사용하여 적용됩니다. VkWriteDescriptorSet의 배열과 VkCopyDescriptorSet의 배열이라는 두 가지 종류의 배열을 매개변수로 받아들입니다. 후자는 이름에서 알 수 있듯이 디스크립터를 서로 복사하는 데 사용할 수 있습니다.
             vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
         }
     }
@@ -1905,7 +1934,7 @@ private:
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
 
-        // 다음 두 매개변수는 실제로 실행을 위해 제출할 커맨드 버퍼를 지정합니다. 가지고 있는 단일 커맨드 버퍼를 제출하기만 하면 됩니다.
+        // 다음 두 매개변수는 실제로 실행을 위해 제출할 커맨드 버퍼를 지정합니다. 가지고 있는 하나의 커맨드 버퍼를 제출하기만 하면 됩니다.
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
@@ -1932,7 +1961,7 @@ private:
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
-        // pResults라는 마지막 선택적 매개변수가 하나 있습니다.프레젠테이션이 성공적인 경우 모든 개별 스왑 체인을 확인하기 위해 VkResult 값의 배열을 지정할 수 있습니다. 현재 함수의 반환 값을 간단히 사용할 수 있기 때문에 단일 스왑 체인만 사용하는 경우에는 필요하지 않습니다.
+        // pResults라는 마지막 선택적 매개변수가 하나 있습니다.프레젠테이션이 성공적인 경우 모든 개별 스왑 체인을 확인하기 위해 VkResult 값의 배열을 지정할 수 있습니다. 현재 함수의 반환 값을 간단히 사용할 수 있기 때문에 하나의 스왑 체인만 사용하는 경우에는 필요하지 않습니다.
         presentInfo.pResults = nullptr; // Optional
 
         // vkQueuePresentKHR 함수는 이미지를 스왑 체인에 표시하라는 요청을 제출합니다. 다음 장에서 vkAcquireNextImageKHR 및 vkQueuePresentKHR 모두에 대해 오류 처리를 추가할 것입니다. 지금까지 본 기능과 달리 오류가 반드시 프로그램이 종료되어야 함을 의미하지는 않기 때문입니다. 커맨드 버퍼가 담긴 큐를 제출하면 이제 삼각형이 표시되어야 합니다.
@@ -1998,12 +2027,12 @@ private:
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         // 뷰 변환을 위해 위에서 45도 각도로 지오메트리를 보기로 결정했습니다. glm::lookAt 함수는 눈 위치, 중심 위치 및 위쪽 축을 매개변수로 사용합니다.
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        // 저는 45도 수직 시야각으로 원근 투영을 사용하기로 선택했습니다. 다른 매개변수는 종횡비, 근거리 및 원거리 보기 평면입니다. 크기 조정 후 창의 새 너비와 높이를 고려하려면 현재 스왑 체인 범위를 사용하여 종횡비를 계산하는 것이 중요합니다.
+        // 저는 45도 수직 시야각으로 원근 투영을 사용하기로 선택했습니다. 다른 매개변수는 종횡비, 근거리 및 원거리 보기 평면입니다. 크기 조정 후 창의 새 너비와 높이를 고려하려면 현재 스왑 체인 범위를 사용하여 종횡비를 계산하는 것이 중요합니다. 이제 투영 행렬이 종횡비를 수정하기 때문에 직사각형이 정사각형으로 변경되었습니다. updateUniformBuffer는 화면 크기 조정을 처리하므로 recreateSwapChain 에서 설정한 디스크립터를 다시 만들 필요가 없습니다.
         ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
         // GLM은 원래 클립 좌표의 Y 좌표가 반전되는 OpenGL용으로 설계되었습니다. 이를 보상하는 가장 쉬운 방법은 투영 행렬에서 Y축의 배율 인수에서 부호를 뒤집는 것입니다. 이렇게 하지 않으면 이미지가 거꾸로 렌더링됩니다.
         ubo.proj[1][1] *= -1;
 
-        // 이제 모든 변환이 정의되었으므로 유니폼 버퍼 개체의 데이터를 현재 유니폼 버퍼에 복사할 수 있습니다. 이것은 스테이징 버퍼가 없는 것을 제외하고 정점 버퍼에 대해 했던 것과 똑같은 방식으로 발생합니다. 이런 식으로 UBO를 사용하여 자주 변경되는 값을 셰이더에 전달하는 것은 최고로 효율적인 방법은 아닙니다. 작은 데이터 버퍼를 셰이더에 전달하는 더 효율적인 방법은 푸시 상수를 이용하는 것입니다. 우리는 미래에 이것들을 살펴볼 것입니다. 다음 장에서는 셰이더가 이 변환 데이터에 액세스할 수 있도록 VkBuffers를 균일 버퍼 설명자에 실제로 바인딩하는 설명자 세트를 살펴보겠습니다.
+        // 이제 모든 변환이 정의되었으므로 유니폼 버퍼 개체의 데이터를 현재 유니폼 버퍼에 복사할 수 있습니다. 이것은 스테이징 버퍼가 없는 것을 제외하고 정점 버퍼에 대해 했던 것과 똑같은 방식으로 발생합니다. 이런 식으로 UBO를 사용하여 자주 변경되는 값을 셰이더에 전달하는 것은 최고로 효율적인 방법은 아닙니다. 작은 데이터 버퍼를 셰이더에 전달하는 더 효율적인 방법은 푸시 상수를 이용하는 것입니다. 우리는 미래에 이것들을 살펴볼 것입니다. 다음 장에서는 셰이더가 이 변환 데이터에 액세스할 수 있도록 VkBuffers를 유니폼 버퍼 디스크립터에 실제로 바인딩하는 디스크립터 세트를 살펴보겠습니다.
         void* data;
         vkMapMemory(device, uniformBuffersMemory[currentImage], 0, sizeof(ubo), 0, &data);
         memcpy(data, &ubo, sizeof(ubo));
@@ -2068,17 +2097,17 @@ private:
 
 
         // 인덱스 버퍼를 활용하여 그립니다.
-        // 그리기에 인덱스 버퍼를 사용하면 recordCommandBuffer에 두 가지 변경 사항이 포함됩니다. 버텍스 버퍼에 대해 했던 것처럼 먼저 인덱스 버퍼를 바인딩해야 합니다. 차이점은 단일 인덱스 버퍼만 가질 수 있다는 것입니다. 불행히도 각 버텍스의 세부 속성 활용을 위해 다른 인덱스를 사용할 수는 없으므로 하나의 속성만 달라지더라도 꼭짓점 데이터를 완전히 복제해야 합니다. 인덱스 버퍼는 인덱스 버퍼, 바이트 오프셋 및 인덱스 데이터 유형을 매개 변수로 포함하는 vkCmdBindIndexBuffer로 바인딩됩니다. 앞에서 언급했듯이 가능한 유형은 VK_INDEX_TYPE_UINT16 및 VK_INDEX_TYPE_UINT32입니다. 인덱스 버퍼를 바인딩하는 것만으로는 아직 아무 것도 변경되지 않습니다. 또한 Vulkan이 인덱스 버퍼를 사용하도록 지시하기 위해 그리기 명령을 변경해야 합니다. vkCmdDraw 줄을 제거하고 vkCmdDrawIndexed로 바꿉니다. 이 함수에 대한 호출은 vkCmdDraw와 매우 유사합니다. 처음 두 매개변수는 인덱스 수와 인스턴스 수를 지정합니다. 우리는 인스턴싱을 사용하지 않으므로 단지 1개의 인스턴스를 지정하였습니다. 인덱스 수는 버텍스 버퍼에 전달될 버텍스의 수를 나타냅니다. 다음 매개변수는 인덱스 버퍼에 대한 오프셋을 지정하며 값 1을 사용하면 그래픽 카드가 두 번째 인덱스에서 읽기 시작합니다. 마지막에서 두 번째 매개변수는 인덱스 버퍼의 인덱스에 추가할 오프셋을 지정합니다. 마지막 매개변수는 우리가 사용하지 않는 인스턴싱을 위한 오프셋을 지정합니다. 이제 프로그램을 실행하면 직사각형이 표시됩니다.
+        // 그리기에 인덱스 버퍼를 사용하면 recordCommandBuffer에 두 가지 변경 사항이 포함됩니다. 버텍스 버퍼에 대해 했던 것처럼 먼저 인덱스 버퍼를 바인딩해야 합니다. 차이점은 하나의 인덱스 버퍼만 가질 수 있다는 것입니다. 불행히도 각 버텍스의 세부 속성 활용을 위해 다른 인덱스를 사용할 수는 없으므로 하나의 속성만 달라지더라도 꼭짓점 데이터를 완전히 복제해 새로 구성해야 합니다. 인덱스 버퍼는 인덱스 버퍼, 바이트 오프셋 및 인덱스 데이터 유형을 매개 변수로 포함하는 vkCmdBindIndexBuffer로 바인딩됩니다. 앞에서 언급했듯이 가능한 유형은 VK_INDEX_TYPE_UINT16 및 VK_INDEX_TYPE_UINT32입니다. 인덱스 버퍼를 바인딩하는 것만으로는 아직 아무 것도 변경되지 않습니다. 또한 Vulkan이 인덱스 버퍼를 사용하도록 지시하기 위해 그리기 명령을 변경해야 합니다. vkCmdDraw 줄을 제거하고 vkCmdDrawIndexed로 바꿉니다. 이 함수에 대한 호출은 vkCmdDraw와 매우 유사합니다. 처음 두 매개변수는 인덱스 수와 인스턴스 수를 지정합니다. 우리는 인스턴싱을 사용하지 않으므로 단지 1개의 인스턴스를 지정하였습니다. 인덱스 수는 버텍스 버퍼에 전달될 버텍스의 수를 나타냅니다. 다음 매개변수는 인덱스 버퍼에 대한 오프셋을 지정하며 값 1을 사용하면 그래픽 카드가 두 번째 인덱스에서 읽기 시작합니다. 마지막에서 두 번째 매개변수는 인덱스 버퍼의 인덱스에 추가할 오프셋을 지정합니다. 마지막 매개변수는 우리가 사용하지 않는 인스턴싱을 위한 오프셋을 지정합니다. 이제 프로그램을 실행하면 직사각형이 표시됩니다.
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
 
-        // @@@@@@
+        // 이제 vkCmdBindDescriptorSets를 사용하여 셰이더의 디스크립터에 각 프레임에 대해 설정된 올바른 디스크립터를 실제로 바인딩하기 위해 recordCommandBuffer 함수를 업데이트해야 합니다. 이것은 vkCmdDrawIndexed 호출 전에 수행해야 합니다. 버텍스 및 인덱스 버퍼와 달리 디스크립터 세트는 그래픽 파이프라인에 고유하지 않습니다. 따라서 디스크립터 세트를 그래픽 또는 컴퓨팅 파이프라인에 바인딩할지 여부를 지정해야 합니다. 다음 매개변수는 디스크립터의 기반이 되는 레이아웃입니다. 다음에 계속되는 세 개의 매개변수는 디스크립터 집합의 인덱스의 첫번째 요소, 바인딩할 집합 수 및 바인딩할 집합 배열을 지정합니다. 잠시 후 다시 이 문제로 돌아가겠습니다. 마지막 두 매개변수는 동적 디스크립터에 사용되는 오프셋 배열을 지정합니다. 미래 장에서 이에 대해 살펴보겠습니다.
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+        
         // 이제 인덱스 버퍼를 사용해 버텍스를 재사용하여 메모리를 절약하는 방법을 알게 되었습니다. 이것은 우리가 복잡한 3D 모델을 로드할 미래에 특히 중요해질 것입니다. 이전 장에서 이미 단일 메모리 할당에서 버퍼와 같은 여러 리소스를 할당해야 한다고 언급했었는데 거기에 더해 드라이버 개발자는 버텍스 및 인덱스 버퍼와 같은 여러 버퍼를 하나의 VkBuffer에 저장하고 vkCmdBindVertexBuffers와 같은 명령에서 오프셋을 사용할 것을 권장합니다. 이 경우 데이터가 더 가깝기 때문에 데이터가 캐시 친화적이라는 장점이 있습니다. 물론 데이터가 새로 고쳐지면 동일한 렌더링 작업 중에 사용되지 않는 경우 여러 리소스에 대해 동일한 메모리 청크를 재사용할 수도 있습니다. 이것을 앨리어싱이라고 하며 일부 Vulkan 함수에는 이를 수행하도록 지정하는 명시적 플래그가 있습니다.
-
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+        
         /*
         인덱스 버퍼를 사용하지 않는 버전
         // 또한 vkCmdDraw에 대한 호출을 변경하여 하드코딩된 숫자 3이 아닌 버퍼의 버텍스 수를 전달해야 합니다.
@@ -2089,6 +2118,7 @@ private:
         // firstInstance : 인스턴스 렌더링의 오프셋으로 사용되며 gl_InstanceIndex의 가장 낮은 값을 정의합니다.
         vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
         */
+
 
         // 이제 렌더 패스를 종료할 수 있습니다.
         vkCmdEndRenderPass(commandBuffer);
@@ -2115,7 +2145,7 @@ private:
             vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
         }
 
-        // 
+        // 디스크립터 풀이 파괴되면 디스크립터 세트는 자동으로 소멸되므로 디스크립터 세트를 명시적으로 정리할 필요가 없습니다. vkAllocateDescriptorSets에 대한 호출은 각각 하나의 유니폼 버퍼 디스크립터가 있는 디스크립터 세트를 할당합니다.
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
         // 디스크립터 세트 레이아웃은 프로그램이 끝날 때까지 새 그래픽 파이프라인을 생성하는 동안 계속 유지되어야 합니다.
