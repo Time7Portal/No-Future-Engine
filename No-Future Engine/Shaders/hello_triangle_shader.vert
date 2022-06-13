@@ -36,10 +36,12 @@ layout(binding = 0) uniform UniformBufferObject
 // vec3 가 아닌 dvec3 64비트 벡터는 여러 슬롯을 사용합니다. 이는 그 뒤에 오는 location의 인덱스가 최소 2 이상 높아야 함을 의미합니다. - https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description
 layout(location = 0) in vec2 inPosition;
 layout(location = 1) in vec3 inColor;
+layout(location = 2) in vec2 inTexCoord; // 텍스쳐 UV 좌표값 추가
 
 
 // 프레그먼트 셰이더로 컬러값을 전달합니다.
 layout(location = 0) out vec3 fragColor;
+layout(location = 1) out vec2 fragTexCoord;
 
 
 
@@ -69,4 +71,5 @@ void main()
 	// 클립 좌표계이므로 맨 마지막 요소로 vec4(inPosition, 0.0, 1.0) 에 추가된 1.0 는 나중에 퍼스펙티브 프로젝션(원근 뷰)에 사용하기 위한 나누기 요소로 쓰여서 가까이 있는 오브젝트를 크게 보여주고 멀리 있는 오브젝트는 작게 보이도록 해줍니다.
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0);
     fragColor = inColor;
+	fragTexCoord = inTexCoord;
 }

@@ -115,6 +115,7 @@ struct Vertex
 {
     glm::vec2 position;
     glm::vec3 color;
+    glm::vec2 texCoord; // @@@@@@@@@
 
     // 버텍스 데이터들을 GPU 메모리에 업로드할때 버텍스 셰이더에 어떤 형태로 전달하면 될지 Vulkan에 알리는 것입니다. 이 정보를 전달하는 데 필요한 구조에는 두 가지 유형이 있습니다.
     // 첫 번째 구조는 VkVertexInputBindingDescription이며 올바른 데이터로 채우기 위해 Vertex 구조 정보를 반환하는 멤버 함수를 추가합니다.
@@ -135,10 +136,10 @@ struct Vertex
     }
 
     // 버텍스 입력을 처리하는 방법을 설명하는 두 번째 구조는 VkVertexInputAttributeDescription입니다. 이 구조체를 채우기 위해 버텍스에 다른 헬퍼 함수를 추가할 것입니다.
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions()
     {
         // 버텍스 속성 설명(VkVertexInputAttributeDescription)은 바인딩 설명에서 비롯된 버텍스 데이터 청크에서 버텍스 속성들을 추출하는 방법을 설명합니다. 현재 버텍스에는 위치와 색상이라는 두 개의 속성이 있으므로 두 개의 속성 설명 구조체가 필요합니다.
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
 
         // binding 매개변수는 버텍스별로 어떤 바인딩 값을 가지는지 알려줍니다.
         attributeDescriptions[0].binding = 0;
@@ -162,6 +163,12 @@ struct Vertex
         attributeDescriptions[1].location = 1;
         attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+        // @@@@@@@@@ : 텍스쳐 코디네이트 추가
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 
         return attributeDescriptions;
     }
@@ -194,10 +201,10 @@ struct UniformBufferObject
 // interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상} }
 const std::vector<Vertex> vertices = {
     // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다.
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 // 직사각형을 그리기 위해 사용될 버텍스 순서입니다.
@@ -238,6 +245,8 @@ private:
 
     VkImage textureImage;                               // @@@
     VkDeviceMemory textureImageMemory;                  // @@@
+    VkImageView textureImageView;                       // @@@@@@
+    VkSampler textureSampler;                           // @@@@@@
     
     VkBuffer vertexBuffer;                              // 버텍스 버퍼
     VkDeviceMemory vertexBufferMemory;                  // 버텍스 버퍼가 들어있는 실제 메모리의 핸들
@@ -344,6 +353,10 @@ private:
         createCommandPool();            // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
         createTextureImage();           // @@@
+
+        createTextureImageView();       // @@@@@@
+
+        createTextureSampler();         // @@@@@@
 
         createVertexBuffer();           // 2-12. 버텍스 버퍼 생성
 
@@ -745,6 +758,8 @@ private:
 
         // 2-4-2. 우리가 사용할 장치의 기능들을 정의합니다. 장치에서 지원하는 모든 기능들은 vkGetPhysicalDeviceFeatures 로 확인 가능합니다. 사실상 지금은 아무런 기능들도 사용하지 않으므로 모든 설정값을 기본(VK_FALSE)으로 두겠습니다.
         VkPhysicalDeviceFeatures deviceFeatures{};
+        // @@@@@@
+        deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 
         // 2-4-3. 이제 논리 장치를 만듭니다. 논리 장치를 만들때 위에서 미리 만들어둔 VkDeviceQueueCreateInfo, VkPhysicalDeviceFeatures 두개의 설정값들을 사용합니다.
@@ -990,6 +1005,11 @@ private:
 
         for (size_t i = 0; i < swapChainImages.size(); i++)
         {
+            // @@@@@@
+            swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat);
+
+
+            /* --- 위 createImageView 에 함수로 분리된 기능임 ---
             // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
             VkImageViewCreateInfo createInfo{};
             createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1015,7 +1035,41 @@ private:
             {
                 throw std::runtime_error("Failed to create image views!");
             }
+            */
         }
+    }
+
+    // @@@@@@
+    HELPER_FUNCTION VkImageView createImageView(VkImage image, VkFormat format)
+    {
+        // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = image;
+        // viewType 과 format 은 어떻게 이미지 데이터가 해석될지 지정합니다. 1D, 2D, 3D 텍스쳐나 큐브 맵도 될 수 있습니다.
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
+        // components 설정값을 사용하면 RGBA 색상 채널을 GGBA 처럼 막 섞을 수 있습니다. 예를 들어 모노크롬 텍스처의 경우 모든 채널을 빨간색 채널에 매핑할 수 있습니다. - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkComponentSwizzle.html
+        viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        // subresourceRange는 이미지의 목적이 무엇이며 액세스해야 하는 이미지 부분을 설명합니다. 우리의 이미지는 밉매핑 레벨이나 다중 레이어 없이 색상 대상으로 사용됩니다.
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 칼라 타겟으로 사용
+        viewInfo.subresourceRange.baseMipLevel = 0; // 밉맵 없음
+        viewInfo.subresourceRange.levelCount = 1; // 밉맵 계층 갯수
+        // 스테레오그래픽 3D 응용 프로그램에서는 여러 레이어가 있는 스왑 체인을 만들 것입니다. 그런 다음 다른 레이어에 액세스하여 왼쪽 및 오른쪽 눈의 보기를 나타내는 각 이미지에 대해 여러 이미지 뷰를 만들 수 있습니다.
+        viewInfo.subresourceRange.baseArrayLayer = 0; // 뷰에 보여질 첫번째 배열 레이어
+        viewInfo.subresourceRange.layerCount = 1; // 배열 레이어 수
+
+        // 이미지 뷰 개체를 만들고 핸들을 받습니다.
+        VkImageView imageView;
+        if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Failed to create texture image view!");
+        }
+
+        return imageView;
     }
 
 
@@ -1131,10 +1185,19 @@ private:
         // 또한 디스크립터가 참조할 셰이더 스테이지를 지정해야 합니다. stageFlags 필드는 VkShaderStageFlagBits 값들의 조합 또는 VK_SHADER_STAGE_ALL_GRAPHICS 값이 될 수 있습니다. 우리는 현재 버텍스 셰이더의 디스크립터만 참조합니다.
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
+        // @@@@@@@@@
+        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.binding = 1;
+        samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerLayoutBinding.pImmutableSamplers = nullptr;
+        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &uboLayoutBinding;
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
 
         // 그런 다음 vkCreateDescriptorSetLayout을 사용하여 생성할 수 있습니다. 이 함수는 바인딩 배열과 함께 간단한 VkDescriptorSetLayoutCreateInfo를 허용합니다.
         if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
@@ -1546,6 +1609,7 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
+    // @@@
     HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
         VkImageCreateInfo imageInfo{};
@@ -1584,6 +1648,7 @@ private:
         vkBindImageMemory(device, image, imageMemory, 0);
     }
 
+    // @@@
     HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
     {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
@@ -1637,6 +1702,7 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
+    // @@@
     HELPER_FUNCTION void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
     {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
@@ -1659,6 +1725,43 @@ private:
         vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
         endSingleTimeCommands(commandBuffer);
+    }
+
+
+
+    // @@@@@@
+    inline void createTextureImageView()
+    {
+        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB);
+    }
+
+
+
+    // @@@@@@
+    inline void createTextureSampler()
+    {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_LINEAR;
+        samplerInfo.minFilter = VK_FILTER_LINEAR;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create texture sampler!");
+        }
     }
 
 
@@ -1759,15 +1862,17 @@ private:
         // 이전 장에 다룬 디스크립터 레이아웃은 바인딩할 수 있는 디스크립터의 유형을 설명합니다. 이 장에서 우리는 각각의 VkBuffer 자원에 대한 디스크립터 세트를 생성하여 이를 유니폼 버퍼 디스크립터에 바인딩할 것입니다. 디스크립터 세트는 직접 만들 수 없으며 명령 버퍼를 처리할때와 비슷하게 풀을 먼저 만들어 할당해야 합니다. 디스크립터 집합에 해당하는 것을 당연히 디스크립터 풀이라고 합니다. 우리는 그것을 설정하기 위해 새로운 함수 createDescriptorPool을 작성할 것입니다.
         
         // 먼저 VkDescriptorPoolSize 구조를 사용하여 디스크립터 세트에 포함될 디스크립터 유형과 그것이 몇 개인지 설명해야 합니다.
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        std::array<VkDescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         // 우리는 매 프레임마다 이러한 디스크립터들 중 하나를 할당하게 됩니다. 이 풀 크기 구조는 기본 VkDescriptorPoolCreateInfo에서 참조합니다.
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
         // 사용 가능한 개별 디스크립터의 최대 수 외에도 할당할 수 있는 디스크립터 집합의 최대 수도 지정해야 합니다.
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
@@ -1806,25 +1911,40 @@ private:
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
-            // 이 경우처럼 전체 버퍼를 덮어쓰는 경우 범위에 대해 VK_WHOLE_SIZE 값을 사용할 수도 있습니다. 디스크립터의 구성은 VkWriteDescriptorSet 구조체의 배열을 매개변수로 사용하는 vkUpdateDescriptorSets 함수를 사용하여 업데이트됩니다.
-            VkWriteDescriptorSet descriptorWrite{};
-            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = textureImageView;
+            imageInfo.sampler = textureSampler;
+
+            // 이 경우처럼 전체 버퍼를 덮어쓰는 경우 범위에 대해 VK_WHOLE_SIZE 값을 사용할 수도 있습니다. 디스크립터의 구성은 VkWriteDescriptorSet 구조체의 배열을 매개변수로 사용하는 vkUpdateDescriptorSets 함수를 사용하여 업데이트 됩니다. 2개를 사용할 것이므로 배열로 만들어 설정합니다.
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             // 처음 두 필드는 업데이트할 디스크립터 세트와 바인딩을 지정합니다. 유니폼 버퍼 바인딩 인덱스를 0으로 지정했습니다. 
-            descriptorWrite.dstSet = descriptorSets[i];
-            descriptorWrite.dstBinding = 0;
+            descriptorWrites[0].dstSet = descriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
             // 디스크립터는 배열이 될 수 있으므로 업데이트하려는 배열의 첫 번째 인덱스도 지정해야 합니다. 배열을 사용하지 않으므로 인덱스는 단순히 0입니다.
-            descriptorWrite.dstArrayElement = 0;
+            descriptorWrites[0].dstArrayElement = 0;
             // 디스크립터의 유형을 다시 지정해야 합니다. 인덱스 dstArrayElement에서 시작하여 배열에서 한 번에 여러 디스크립터를 업데이트할 수 있습니다.
-            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             // descriptorCount 필드는 업데이트하려는 배열 요소의 수를 지정합니다.
-            descriptorWrite.descriptorCount = 1;
+            descriptorWrites[0].descriptorCount = 1;
             // 마지막 필드는 실제로 디스크립터를 구성하는 descriptorCount 구조체가 있는 배열을 참조합니다. 세 가지 중 실제로 사용해야 하는 디스크립터의 유형에 따라 다릅니다. pBufferInfo 필드는 버퍼 데이터를 참조하는 디스크립터에 사용되며 pImageInfo는 이미지 데이터를 참조하는 디스크립터에 사용되며 pTexelBufferView는 버퍼 뷰를 참조하는 디스크립터에 사용됩니다. 디스크립터는 버퍼를 기반으로 하므로 pBufferInfo를 사용합니다.
-            descriptorWrite.pBufferInfo = &bufferInfo;
-            descriptorWrite.pImageInfo = nullptr; // Optional
-            descriptorWrite.pTexelBufferView = nullptr; // Optional
+            descriptorWrites[0].pBufferInfo = &bufferInfo;
+            descriptorWrites[0].pImageInfo = nullptr; // Optional
+            descriptorWrites[0].pTexelBufferView = nullptr; // Optional
+
+            // 마찬가지로 두번째 디스크립터 세트도 동일한 방식으로 설정합니다.
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = descriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].dstArrayElement = 0;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pImageInfo = &imageInfo;
 
             // 업데이트는 vkUpdateDescriptorSets를 사용하여 적용됩니다. VkWriteDescriptorSet의 배열과 VkCopyDescriptorSet의 배열이라는 두 가지 종류의 배열을 매개변수로 받아들입니다. 후자는 이름에서 알 수 있듯이 디스크립터를 서로 복사하는 데 사용할 수 있습니다.
-            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -2317,6 +2437,10 @@ private:
 
         // 디스크립터 풀이 파괴되면 디스크립터 세트는 자동으로 소멸되므로 디스크립터 세트를 명시적으로 정리할 필요가 없습니다. vkAllocateDescriptorSets에 대한 호출은 각각 하나의 유니폼 버퍼 디스크립터가 있는 디스크립터 세트를 할당합니다.
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+
+        // @@@@@@
+        vkDestroySampler(device, textureSampler, nullptr);
+        vkDestroyImageView(device, textureImageView, nullptr);
 
         // @@@
         vkDestroyImage(device, textureImage, nullptr);
