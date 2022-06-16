@@ -23,6 +23,6 @@ void main()
 	// 초록색 단색 삼각형
 	// outColor = vec4(0.0, 1.0, 0.0, 1.0);
 
-	// 버텍스 칼라값을 보간한 요란한 삼각형
-	outColor = vec4(fragColor, 1.0) * texture(texSampler, fragTexCoord);
+	// 버텍스 칼라값을 보간해서 약하게 적용 + 이미지 텍스쳐 적용한 요란한 삼각형
+	outColor = (vec4(fragColor, 1.0) * 0.2) + texture(texSampler, fragTexCoord);
 }

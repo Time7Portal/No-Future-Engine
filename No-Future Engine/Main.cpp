@@ -6,8 +6,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp> // MVP 변환 행렬을 만들기 위해 사용합니다. glm/gtc/matrix_transform.hpp 헤더는 glm::rotate와 같은 모델 변환, glm::lookAt와 같은 보기 변환 및 glm::perspective와 같은 투영 변환을 생성하는 데 사용할 수 있는 함수를 노출합니다. GLM_FORCE_RADIANS 정의는 가능한 혼동을 피하기 위해 glm::rotate와 같은 함수가 라디안을 인수로 사용하도록 하는 데 필요합니다.
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h> // 이미지 로딩을 위한 라이브러리
+#define STB_IMAGE_IMPLEMENTATION // stb_image.h 헤더는 기본적으로 함수의 프로토타입만 정의합니다. 하나의 코드 파일에서 함수 본문을 한번만 포함하기 위해 STB_IMAGE_IMPLEMENTATION 정의가 있는 헤더를 포함해야 합니다. 그렇지 않으면 링킹 오류가 발생합니다.
+#include <stb_image.h> // 이미지를 로드하는 데 사용할 수 있는 라이브러리가 많이 있으며 BMP 및 PPM 과 같은 간단한 형식을 로드하는 고유한 코드를 작성할 수도 있습니다. 이 튜토리얼에서는 stb 컬렉션의 stb_image 라이브러리를 사용할 것입니다. 장점은 모든 코드가 단일 파일에 있으므로 까다로운 빌드 구성이 필요하지 않다는 것입니다. stb_image.h를 다운로드하여 포함 경로에 위치를 추가합니다.
 
 
 #include <iostream>         // 
@@ -243,12 +243,7 @@ private:
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
 
-    // 애플리케이션에 텍스처를 추가하려면 다음 단계가 필요합니다.
-    // 1. 장치 메모리가 지원하는 이미지 개체 만들기
-    // 2. 이미지 파일을 픽셀로 채우기
-    // 3. 이미지 샘플러 만들기
-    // 4. 텍스처에서 색상을 샘플링하기 위해 결합된 이미지 샘플러 디스크립터를 추가합니다.
-    VkImage textureImage;                               // @@@
+    VkImage textureImage;                               // 텍스쳐 이미지 핸들
     VkDeviceMemory textureImageMemory;                  // @@@
     VkImageView textureImageView;                       // @@@@@@
     VkSampler textureSampler;                           // @@@@@@
@@ -357,7 +352,7 @@ private:
 
         createCommandPool();            // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createTextureImage();           // @@@
+        createTextureImage();           // 2-12. 이미지(텍스쳐) 파일 로드
 
         createTextureImageView();       // @@@@@@
 
@@ -1584,6 +1579,14 @@ private:
     // @@@
     void createTextureImage()
     {
+        // 애플리케이션에 텍스처를 추가하려면 다음 단계가 필요합니다.
+        // 1. 장치 메모리가 지원하는 이미지 개체 만들기
+        // 2. 이미지 파일을 픽셀로 채우기
+        // 3. 이미지 샘플러 만들기
+        // 4. 텍스처에서 색상을 샘플링하기 위해 결합된 이미지 샘플러 디스크립터를 추가합니다.
+        
+        // 이미지를 로드하고 Vulkan 이미지 객체에 업로드할 새 함수 createTextureImage를 만들었습니다. 우리는 커맨드 버퍼를 사용할 것이므로 createCommandPool 함수 다음에 호출되게 만들었습니다. $(SolutionDir)No-Future Engine\Textures 경로에 넣어둔 texture.jpg 라는 임시 이미지를 로드할 것입니다. stb_image.h 라이브러리는 JPEG, PNG, BMP 및 GIF와 같은 가장 일반적인 이미지 파일 형식을 지원합니다.
+
         // 우리는 이미 스왑 체인 확장에 의해 자동으로 생성된 이미지 오브젝트를 만든 경험이 있습니다. 이번에는 우리가 직접 만들어야 합니다. 이미지를 생성하고 데이터로 채우는 것은 버텍스 버퍼 생성과 유사합니다. 먼저 스테이징 리소스를 만들고 픽셀 데이터로 채운 다음 렌더링에 사용할 최종 이미지 객체에 복사합니다. 이 목적을 위해 스테이징 이미지를 생성하는 것도 가능하지만 VkBuffer에서 이미지로 픽셀 값들을 직접 복사할 수도 있으며 이 API는 일부 하드웨어에서 실제로 더 빠릅니다. 먼저 이 버퍼를 만들고 픽셀 값으로 채운 다음 픽셀을 복사할 이미지를 만듭니다. 이미지 생성은 버퍼 생성과 크게 다르지 않습니다. 이전에 본 것처럼 메모리 요구 사항을 쿼리하고 장치 메모리를 할당하고 바인딩하는 작업이 포함됩니다. 그러나 이미지로 작업할 때 처리해야 할 추가 사항이 있습니다. 이미지는 픽셀이 메모리에서 구성되는 방식에 영향을 주는 다양한 레이아웃을 가질 수 있습니다. 그러나 그래픽 하드웨어가 작동하는 방식 때문에 단순히 픽셀을 행 단위로 저장하는 것만으로는 최상의 성능을 얻을 수 없습니다. 이미지에 대한 작업을 수행할 때 해당 작업에 사용하기에 최적의 레이아웃이 있는지 확인해야 합니다. 렌더 패스를 구성했을 때 실제로 이러한 레이아웃 중 일부를 이미 보았습니다.
         // 1. VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: 프레젠테이션에 최적
         // 2. VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : 프래그먼트 셰이더에서 색상을 쓰기 위한 첨부 파일로 최적
@@ -1592,8 +1595,9 @@ private:
         // 5. VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : 셰이더 샘플링에 최적
         // 이미지 레이아웃을 전환하는 가장 일반적인 방법 중 하나는 파이프라인 장벽입니다. 파이프라인 장벽은 주로 이미지를 읽기 전에 기록했는지 확인하는 것처럼 리소스에 대한 액세스를 동기화하는 데 사용되지만 레이아웃을 전환하는 데 사용할 수도 있습니다. 이 장에서는 파이프라인 장벽이 이러한 목적으로 사용되는 방법을 볼 것입니다. VK_SHARING_MODE_EXCLUSIVE를 사용할 때 큐 패밀리 소유권을 이전하는 데 장벽을 추가로 사용할 수 있습니다.
 
+        // 이 라이브러리로 이미지를 로드하는 것은 정말 쉽습니다. stbi_load 함수는 파일 경로와 로드할 채널 수를 인자로 받습니다. STBI_rgb_alpha 값은 알파 채널이 없는 경우에도 이미지를 강제로 로드하므로 향후 여러 텍스처를 일관성있게 로드하기 좋습니다. 가운데 세 개의 매개변수는 이미지의 너비, 높이 및 실제 채널 수에 대한 출력입니다. 반환되는 포인터는 픽셀 값 배열의 첫 번째 요소입니다. STBI_rgb_alpha의 경우 픽셀당 4바이트로 픽셀 갯수는 총 texWidth * texHeight * 4(rgba) 입니다.
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load("Textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load("Textures/texture2.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels)
@@ -1601,15 +1605,19 @@ private:
             throw std::runtime_error("Failed to load texture image!");
         }
 
+        // 이제 vkMapMemory를 사용하고 픽셀을 복사할 수 있도록 가시적인 호스트(CPU) 메모리에 버퍼를 만들 것입니다. 임시 버퍼이므로 함수 내 지역 변수로 만들었습니다.
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
+        // 버퍼는 매핑할 수 있도록 호스트에서 볼 수 있는 메모리에 있어야 하고 나중에 이미지에 복사할 수 있도록 전송 소스로 사용할 수 있어야 합니다.
         createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
+        // 그런 다음 이미지 로딩 라이브러리에서 가져온 픽셀 값을 스테이징 버퍼 메모리로 직접 복사할 수 있습니다.
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
         memcpy(data, pixels, static_cast<size_t>(imageSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
+        // stb 라이브러리에서 사용한 원래의 픽셀 배열을 정리하는 것을 잊지 마십시오.
         stbi_image_free(pixels);
 
         createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
@@ -1625,16 +1633,23 @@ private:
     // @@@
     HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
+        // 버퍼의 픽셀 값에 하나하나 액세스하도록 셰이더를 설정할 수도 있지만 이 목적을 위해 Vulkan 에선 이미지 개체를 사용하는 것이 좋습니다. 이미지 개체를 사용하면 2D 좌표를 사용할 수 있으므로 색상을 더 쉽고 빠르게 검색할 수 있습니다. 이미지 객체 내의 픽셀은 텍셀로 알려져 있으며 지금부터 그 이름을 사용합니다. 다음 새 클래스 구성원을 추가합니다. 이미지에 대한 매개변수는 VkImageCreateInfo 구조체에 지정됩니다.
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        // imageType 필드에 지정된 이미지 유형은 Vulkan에 이미지의 텍셀이 처리될 좌표계의 종류를 알려줍니다. 1D, 2D, 3D 이미지 생성이 가능합니다. 예를 들어 1차원 이미지는 데이터 또는 그라디언트 배열을 저장하는 데 사용할 수 있고 2차원 이미지는 주로 텍스처에 사용되며 3차원 이미지는 복셀 볼륨을 저장하는 데 사용할 수 있습니다. extent 필드는 기본적으로 각 축에 얼마나 많은 텍셀이 있는지, 이미지의 크기를 지정합니다. 이것이 depth가 0이 아닌 1이어야 하는 이유입니다. 텍스처는 배열이 아니며 지금은 밉매핑을 사용하지 않습니다.
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
         imageInfo.extent.width = width;
         imageInfo.extent.height = height;
         imageInfo.extent.depth = 1;
         imageInfo.mipLevels = 1;
         imageInfo.arrayLayers = 1;
+        // Vulkan은 가능한 많은 이미지 형식을 지원하지만 텍셀에 대해 버퍼의 픽셀과 동일한 형식을 사용해야 합니다. 그렇지 않으면 복사 작업이 실패합니다.
         imageInfo.format = format;
+        // 타일링 필드는 다음 두 값 중 하나를 가질 수 있습니다.
+        // 1. VK_IMAGE_TILING_LINEAR: 텍셀은 픽셀 배열처럼 행 중심 순서로 배치됩니다.
+        // 2. VK_IMAGE_TILING_OPTIMAL : 텍셀은 최적의 액세스를 위해 구현 정의된 순서로 배치됩니다.
         imageInfo.tiling = tiling;
+        // 이미지의 레이아웃과 달리 타일링 모드는 나중에 변경할 수 없습니다. 이미지 메모리의 텍셀에 직접 액세스하려면 VK_IMAGE_TILING_LINEAR를 사용해야 합니다. 스테이징 이미지 대신 스테이징 버퍼를 사용할 것이므로 필요하지 않습니다. 셰이더에서 효율적인 액세스를 위해 VK_IMAGE_TILING_OPTIMAL을 사용할 것입니다.
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imageInfo.usage = usage;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
