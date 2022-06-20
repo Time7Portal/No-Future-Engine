@@ -1620,6 +1620,7 @@ private:
         // stb 라이브러리에서 사용한 원래의 픽셀 배열을 정리하는 것을 잊지 마십시오.
         stbi_image_free(pixels);
 
+        // 이 함수는 이미 상당히 커지고 있으며 이후 장에서 더 많은 이미지를 생성해야 할 필요가 있으므로 버퍼에서 했던 것처럼 이미지 생성을 createImage 함수로 추상화해야 합니다. 함수를 만들고 이미지 개체 생성 및 메모리 할당을 해당 함수로 이동합니다. 너비, 높이, 형식, 타일링 모드, 사용량 및 메모리 속성 매개변수를 만들었습니다. 이 매개변수는 이 튜토리얼 전체에서 만들 이미지마다 다를 수 있기 때문입니다.
         createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
         transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -1649,17 +1650,27 @@ private:
         // 1. VK_IMAGE_TILING_LINEAR: 텍셀은 픽셀 배열처럼 행 중심 순서로 배치됩니다.
         // 2. VK_IMAGE_TILING_OPTIMAL : 텍셀은 최적의 액세스를 위해 구현 정의된 순서로 배치됩니다.
         imageInfo.tiling = tiling;
-        // 이미지의 레이아웃과 달리 타일링 모드는 나중에 변경할 수 없습니다. 이미지 메모리의 텍셀에 직접 액세스하려면 VK_IMAGE_TILING_LINEAR를 사용해야 합니다. 스테이징 이미지 대신 스테이징 버퍼를 사용할 것이므로 필요하지 않습니다. 셰이더에서 효율적인 액세스를 위해 VK_IMAGE_TILING_OPTIMAL을 사용할 것입니다.
+        // 이미지의 레이아웃과 달리 타일링 모드는 나중에 변경할 수 없습니다. 이미지 메모리의 텍셀에 직접 액세스하려면 VK_IMAGE_TILING_LINEAR를 사용해야 합니다. 스테이징 이미지 대신 스테이징 버퍼를 사용할 것이므로 필요하지 않습니다. 나중에 셰이더에서 효율적인 액세스를 위해 VK_IMAGE_TILING_OPTIMAL을 사용할 것입니다.
+        // 이미지의 initialLayout에는 두 가지 가능한 값만 있습니다.
+        // 1. VK_IMAGE_LAYOUT_UNDEFINED: GPU에서 사용할 수 없으며 맨 처음 트렌지션 할 때 텍셀을 버립니다.
+        // 2. VK_IMAGE_LAYOUT_PREINITIALIZED : GPU에서 사용할 수 없지만 맨 처음 트렌지션 할 때 텍셀을 유지합니다.
+        // 첫 번째 트렌지션에 텍셀을 보존해야 하는 상황은 거의 드뭅니다. 그러나 한 가지 예로 이미지를 VK_IMAGE_TILING_LINEAR 레이아웃과 함께 스테이징 이미지로 사용하려는 경우가 해당 사항입니다. 이 경우 텍셀 데이터를 업로드한 다음 데이터 손실 없이 이미지를 전송 소스로 전환하고 싶을 때 사용합니다. 그러나 우리의 경우 먼저 이미지를 전송 목적지로 전환한 다음 버퍼 개체에서 텍셀 데이터를 복사하므로 이 속성이 필요하지 않으며 VK_IMAGE_LAYOUT_UNDEFINED를 안전하게 사용할 수 있습니다.
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        // usage 필드는 버퍼 생성의 그것과 동일한 의미를 가집니다. 이미지는 버퍼 복사의 대상으로 사용되므로 전송 대상으로 설정해야 합니다. 또한 셰이더에서 이미지에 액세스하여 메시에 색상을 지정할 수 있기를 원하므로 사용에는 VK_IMAGE_USAGE_SAMPLED_BIT가 포함되어야 합니다.
         imageInfo.usage = usage;
+        // 샘플 플래그는 멀티샘플링과 관련이 있습니다. 이것은 첨부로 사용할 이미지에만 관련이 있으므로 하나의 샘플을 사용하십시오. 희소 이미지와 관련된 이미지에 대한 몇 가지 선택적 플래그가 있습니다. 희소 이미지는 실제 메모리의 특정 영역만 지원하기 위한 이미지입니다. 예를 들어, 복셀 지형에 3D 텍스처를 사용하는 경우 대량의 "공기" 값을 저장하기 위해 메모리를 할당하여 낭비하는 것을 방지할 수 있습니다. 이 튜토리얼에서는 사용하지 않을 것이므로 기본값인 0으로 두십시오.
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.flags = 0; // Optional
+        // 이미지는 하나의 큐 페밀리, 즉 그래픽(및 그에 따른) 전송 작업을 지원하는 페밀리 하나만 사용할 예정입니다.
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+        // 이미지는 특별하다 할만한 매개변수가 없는 vkCreateImage를 사용하여 생성됩니다. VK_FORMAT_R8G8B8A8_SRGB 형식이 그래픽 하드웨어에서 지원되지 않을 수 있습니다. 이 경우 수용 가능한 대안 목록이 있어야 하며 지원되는 최상의 대안을 선택해야 합니다. 그러나 이 특정 형식에 대한 지원은 매우 광범위하므로 이 단계를 건너뛸 것입니다. 다른 형식을 사용하려면 성가신 변환이 필요합니다. 우리는 깊이 버퍼 장에서 이에 대해 다시 다룰 것입니다. 거기서 그러한 시스템을 구현할 것입니다.
         if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create image!");
         }
 
+        // 이미지에 메모리를 할당하는 것은 버퍼에 메모리를 할당하는 것과 정확히 같은 방식으로 작동합니다. vkGetBufferMemoryRequirements 대신 vkGetImageMemoryRequirements를 사용하고 vkBindBufferMemory 대신 vkBindImageMemory를 사용할 뿐입니다.
         VkMemoryRequirements memRequirements;
         vkGetImageMemoryRequirements(device, image, &memRequirements);
 
