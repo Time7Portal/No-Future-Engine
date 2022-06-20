@@ -354,23 +354,23 @@ private:
 
         createTextureImage();           // 2-12. 이미지(텍스쳐) 파일 로드
 
-        createTextureImageView();       // @@@@@@
+        createTextureImageView();       // 2-13. @@@@@@
 
-        createTextureSampler();         // @@@@@@
+        createTextureSampler();         // 2-14. @@@@@@
 
-        createVertexBuffer();           // 2-12. 버텍스 버퍼 생성
+        createVertexBuffer();           // 2-15. 버텍스 버퍼 생성
 
-        createIndexBuffer();            // 2-13. 인덱스 버퍼 생성
+        createIndexBuffer();            // 2-16. 인덱스 버퍼 생성
 
-        createUniformBuffers();         // 2-14. 유니폼 버퍼 생성
+        createUniformBuffers();         // 2-17. 유니폼 버퍼 생성
 
-        createDescriptorPool();         // 2-15. 디스크립터 풀 생성
+        createDescriptorPool();         // 2-18. 디스크립터 풀 생성
 
-        createDescriptorSets();         // 2-16. 디스크립터 셋 생성
+        createDescriptorSets();         // 2-19. 디스크립터 셋 생성
 
-        createCommandBuffers();         // 2-17. 그래픽 카드로 보낼 커맨드 버퍼 생성
+        createCommandBuffers();         // 2-20. 그래픽 카드로 보낼 커맨드 버퍼 생성
 
-        createSyncObjects();            // 2-18. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+        createSyncObjects();            // 2-21. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     }
 
 
@@ -1576,7 +1576,7 @@ private:
 
 
 
-    // @@@
+    // 2-12. 이미지(텍스쳐) 파일 로드
     void createTextureImage()
     {
         // 애플리케이션에 텍스처를 추가하려면 다음 단계가 필요합니다.
@@ -1605,7 +1605,7 @@ private:
             throw std::runtime_error("Failed to load texture image!");
         }
 
-        // 이제 vkMapMemory를 사용하고 픽셀을 복사할 수 있도록 가시적인 호스트(CPU) 메모리에 버퍼를 만들 것입니다. 임시 버퍼이므로 함수 내 지역 변수로 만들었습니다.
+        // 이제 vkMapMemory를 사용하고 픽셀을 복사할 수 있도록 호스트(CPU)가 볼 수 있는 메모리에 버퍼를 만들 것입니다. 임시 버퍼이므로 함수 내 지역 변수로 만들었습니다.
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
         // 버퍼는 매핑할 수 있도록 호스트에서 볼 수 있는 메모리에 있어야 하고 나중에 이미지에 복사할 수 있도록 전송 소스로 사용할 수 있어야 합니다.
@@ -1630,7 +1630,7 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    // @@@
+    // 이미지 개체를 생성해주는 헬퍼 함수
     HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
         // 버퍼의 픽셀 값에 하나하나 액세스하도록 셰이더를 설정할 수도 있지만 이 목적을 위해 Vulkan 에선 이미지 개체를 사용하는 것이 좋습니다. 이미지 개체를 사용하면 2D 좌표를 사용할 수 있으므로 색상을 더 쉽고 빠르게 검색할 수 있습니다. 이미지 객체 내의 픽셀은 텍셀로 알려져 있으며 지금부터 그 이름을 사용합니다. 다음 새 클래스 구성원을 추가합니다. 이미지에 대한 매개변수는 VkImageCreateInfo 구조체에 지정됩니다.
@@ -1794,7 +1794,7 @@ private:
 
 
 
-    // 2-12. 버텍스 버퍼 생성
+    // 2-15. 버텍스 버퍼 생성
     // Vulkan의 버퍼는 그래픽 카드에서 읽을 수 있는 임의의 데이터를 저장하는 데 사용되는 메모리 영역입니다. 그것들은 버텍스 데이터를 저장하는 데 사용할 수 있으며, 물론 다른 많은 목적으로도 사용할 수 있습니다. 지금까지 다루었던 Vulkan 객체들과 달리 버퍼는 자동으로 메모리를 할당하지 않습니다. Vulkan API는 프로그래머가 거의 모든 것을 제어할 수 있도록 던져주며 메모리 관리는 그 중에 하나입니다.
     inline void createVertexBuffer()
     {
@@ -1843,7 +1843,7 @@ private:
 
 
 
-    // 2-13. 인덱스 버퍼 생성
+    // 2-16. 인덱스 버퍼 생성
     // createIndexBuffer 함수는 createVertexBuffer와 거의 동일합니다.
     void createIndexBuffer()
     {
@@ -1869,7 +1869,7 @@ private:
 
 
 
-    // 2-14. 유니폼 버퍼 생성
+    // 2-17. 유니폼 버퍼 생성
     inline void createUniformBuffers()
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -1884,7 +1884,7 @@ private:
 
 
 
-    // 2-15. 디스크립터 풀 생성
+    // 2-18. 디스크립터 풀 생성
     inline void createDescriptorPool()
     {
         // 이전 장에 다룬 디스크립터 레이아웃은 바인딩할 수 있는 디스크립터의 유형을 설명합니다. 이 장에서 우리는 각각의 VkBuffer 자원에 대한 디스크립터 세트를 생성하여 이를 유니폼 버퍼 디스크립터에 바인딩할 것입니다. 디스크립터 세트는 직접 만들 수 없으며 명령 버퍼를 처리할때와 비슷하게 풀을 먼저 만들어 할당해야 합니다. 디스크립터 집합에 해당하는 것을 당연히 디스크립터 풀이라고 합니다. 우리는 그것을 설정하기 위해 새로운 함수 createDescriptorPool을 작성할 것입니다.
@@ -1913,7 +1913,7 @@ private:
 
 
 
-    // 2-16. 디스크립터 셋 생성
+    // 2-19. 디스크립터 셋 생성
     inline void createDescriptorSets()
     {
         // 이제 디스크립터 세트 자체를 할당할 수 있습니다. 그 목적을 위해 createDescriptorSets 함수를 추가하였습니다. 디스크립터 세트 할당은 VkDescriptorSetAllocateInfo 구조체로 설명됩니다. 할당할 디스크립터 풀, 할당할 디스크립터 세트 수 및 기반으로 할 디스크립터 레이아웃을 지정해야 합니다. 우리의 경우 비행 중인 각 프레임에 대해 단 하나의 디스크립터 세트를 만들고 모두 동일한 레이아웃을 사용합니다. 불행히도 vkAllocateDescriptorSets 함수가 세트 수와 일치하는 배열 크기의 데이터를 기대하기 때문에 레이아웃의 모든 복사본이 들어가야 합니다.
@@ -2101,7 +2101,7 @@ private:
 
 
 
-    // 2-17. 그래픽 카드로 보낼 커맨드 버퍼 생성
+    // 2-20. 그래픽 카드로 보낼 커맨드 버퍼 생성
     inline void createCommandBuffers()
     {
         // 각각의 프레임 마다 커맨드 버퍼가 존재해야 하므로, 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 만큼으로 조정합니다.
@@ -2129,7 +2129,7 @@ private:
 
 
 
-    // 2-18. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+    // 2-21. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     inline void createSyncObjects()
     {
         // 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
