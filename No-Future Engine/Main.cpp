@@ -1690,14 +1690,19 @@ private:
     // @@@
     HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
     {
+        // 이제 우리가 작성할 함수는 명령 버퍼를 다시 기록하고 실행하는 것과 관련이 있으므로 이제 해당 로직을 헬퍼 함수 한두개에 옮기기에 좋은 시간입니다. 여전히 버퍼를 사용하고 있었다면 이제 vkCmdCopyBufferToImage를 기록하고 실행하여 작업을 완료하는 함수를 작성할 수 있지만 이 명령을 사용하려면 먼저 이미지가 올바른 레이아웃에 있어야 합니다. 레이아웃 전환을 처리하는 새 함수를 만듭니다.
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
+        // 레이아웃 전환을 수행하는 가장 일반적인 방법 중 하나는 이미지 메모리 배리어를 사용하는 것입니다. 이와 같은 파이프라인 장벽은 일반적으로 버퍼에 대한 쓰기가 읽기 전에 완료되도록 하는 것과 같이 리소스에 대한 액세스를 동기화하는 데 사용되지만 VK_SHARING_MODE_EXCLUSIVE가 사용될 때 이미지 레이아웃을 전환하고 대기열 패밀리 소유권을 이전하는 데에도 사용할 수 있습니다. 버퍼에 대해 이를 수행하는 동등한 버퍼 메모리 장벽이 있습니다.
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        // 처음 두 필드는 레이아웃 전환을 지정합니다. 이미지의 기존 내용에 신경 쓰지 않는다면 VK_IMAGE_LAYOUT_UNDEFINED를 oldLayout으로 사용할 수 있습니다.
         barrier.oldLayout = oldLayout;
         barrier.newLayout = newLayout;
+        // 큐 패밀리 소유권을 이전하기 위해 장벽을 사용하는 경우 이 두 필드는 큐 패밀리의 인덱스여야 합니다. 이 작업을 수행하지 않으려면 VK_QUEUE_FAMILY_IGNORED로 설정해야 합니다(기본값 아님!).
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        // image 및 subresourceRange는 영향을 받는 이미지와 이미지의 특정 부분을 지정합니다. 현재 우리의 이미지는 배열이 아니며 밉매핑 수준이 없으므로 하나의 수준과 레이어만 지정됩니다.
         barrier.image = image;
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.baseMipLevel = 0;
@@ -1726,9 +1731,10 @@ private:
         }
         else
         {
-            throw std::invalid_argument("unsupported layout transition!");
+            throw std::invalid_argument("Unsupported layout transition!");
         }
 
+        // 배리어는 주로 동기화 목적으로 사용되므로 배리어보다 먼저 발생해야 하는 리소스와 관련된 작업 유형과 배리어에서 기다려야 하는 리소스와 관련된 작업을 지정해야 합니다. 수동으로 동기화하기 위해 이미 vkQueueWaitIdle을 사용하고 있음에도 불구하고 이를 수행해야 합니다. 올바른 값은 이전 레이아웃과 새 레이아웃에 따라 다르므로 사용할 전환을 파악한 후 다시 이 값으로 돌아갑니다. 모든 유형의 파이프라인 장벽은 동일한 기능을 사용하여 제출됩니다. 명령 버퍼 뒤의 첫 번째 매개변수는 장벽 이전에 발생해야 하는 작업이 어느 파이프라인 단계에서 발생하는지 지정합니다. 두 번째 매개변수는 작업이 장벽에서 대기하는 파이프라인 단계를 지정합니다. 장벽 전후에 지정할 수 있는 파이프라인 단계는 장벽 전후에 리소스를 사용하는 방법에 따라 다릅니다. 허용된 값은 사양의 이 표에 나열되어 있습니다. 예를 들어 장벽 이후의 유니폼에서 읽으려는 경우 VK_ACCESS_UNIFORM_READ_BIT의 사용법과 파이프라인 단계로 유니폼에서 읽을 가장 빠른 셰이더를 지정합니다(예: VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT). 이러한 유형의 사용에 대해 비셰이더 파이프라인 단계를 지정하는 것은 의미가 없으며 사용 유형과 일치하지 않는 파이프라인 단계를 지정할 때 유효성 검사 계층에서 경고합니다. 세 번째 매개변수는 0 또는 VK_DEPENDENCY_BY_REGION_BIT입니다.후자는 장벽을 지역별 조건으로 바꿉니다.이는 예를 들어 지금까지 작성된 리소스 부분에서 구현이 이미 읽기를 시작할 수 있음을 의미합니다. 마지막 세 쌍의 매개변수는 메모리 장벽, 버퍼 메모리 장벽 및 여기에서 사용하는 것과 같은 이미지 메모리 장벽의 세 가지 사용 가능한 유형의 파이프라인 장벽 배열을 참조합니다.우리는 아직 VkFormat 매개변수를 사용하지 않고 있지만 깊이 버퍼 장에서 특별한 전환을 위해 이 매개변수를 사용할 것입니다.
         vkCmdPipelineBarrier(
             commandBuffer,
             sourceStage, destinationStage,
@@ -2050,7 +2056,7 @@ private:
 
     HELPER_FUNCTION VkCommandBuffer beginSingleTimeCommands()
     {
-        // 메모리 전송 작업은 그리기 명령과 마찬가지로 명령 버퍼를 사용하여 실행됩니다. 따라서 반드시 먼저 임시 명령 버퍼를 먼저 할당해야 합니다. 또한 이러한 임시 명령 버퍼들을 위해 별도의 커맨드 풀을 만드는 것도 좋습니다. 이러한 구현이 메모리 할당 최적화를 적용할 수 있기 때문입니다. 이 경우 명령 풀 생성에 VK_COMMAND_POOL_CREATE_TRANSIENT_BIT 플래그를 사용하는 것이 좋습니다.
+        // 이러한 함수의 코드는 copyBuffer에 있는 기존 코드를 기반으로 합니다. 이제 해당 기능을 다음과 같이 단순화할 수 있습니다. 메모리 전송 작업은 그리기 명령과 마찬가지로 명령 버퍼를 사용하여 실행됩니다. 따라서 반드시 먼저 임시 명령 버퍼를 먼저 할당해야 합니다. 또한 이러한 임시 명령 버퍼들을 위해 별도의 커맨드 풀을 만드는 것도 좋습니다. 이러한 구현이 메모리 할당 최적화를 적용할 수 있기 때문입니다. 이 경우 명령 풀 생성에 VK_COMMAND_POOL_CREATE_TRANSIENT_BIT 플래그를 사용하는 것이 좋습니다.
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
