@@ -1623,6 +1623,10 @@ private:
         // 이 함수는 이미 상당히 커지고 있으며 이후 장에서 더 많은 이미지를 생성해야 할 필요가 있으므로 버퍼에서 했던 것처럼 이미지 생성을 createImage 함수로 추상화해야 합니다. 함수를 만들고 이미지 개체 생성 및 메모리 할당을 해당 함수로 이동합니다. 너비, 높이, 형식, 타일링 모드, 사용량 및 메모리 속성 매개변수를 만들었습니다. 이 매개변수는 이 튜토리얼 전체에서 만들 이미지마다 다를 수 있기 때문입니다.
         createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
+        // 이제 텍스처 이미지 설정을 완료하는 데 필요한 모든 도구가 있으므로 createTextureImage 함수로 돌아갑니다. 우리가 거기서 마지막으로 한 것은 텍스처 이미지를 만드는 것이었습니다. 다음 단계는 스테이징 버퍼를 텍스처 이미지에 복사하는 것입니다. 여기에는 두 단계가 포함됩니다.
+        // 1. 텍스처 이미지를 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL로 전환
+        // 2. 버퍼에서 이미지 복사 작업 실행
+        // 이것은 방금 만든 transitionImageLayout 함수로 쉽게 수행할 수 있습니다.
         transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
         transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -1734,7 +1738,7 @@ private:
             throw std::invalid_argument("Unsupported layout transition!");
         }
 
-        // 배리어는 주로 동기화 목적으로 사용되므로 배리어보다 먼저 발생해야 하는 리소스와 관련된 작업 유형과 배리어에서 기다려야 하는 리소스와 관련된 작업을 지정해야 합니다. 수동으로 동기화하기 위해 이미 vkQueueWaitIdle을 사용하고 있음에도 불구하고 이를 수행해야 합니다. 올바른 값은 이전 레이아웃과 새 레이아웃에 따라 다르므로 사용할 전환을 파악한 후 다시 이 값으로 돌아갑니다. 모든 유형의 파이프라인 장벽은 동일한 기능을 사용하여 제출됩니다. 명령 버퍼 뒤의 첫 번째 매개변수는 장벽 이전에 발생해야 하는 작업이 어느 파이프라인 단계에서 발생하는지 지정합니다. 두 번째 매개변수는 작업이 장벽에서 대기하는 파이프라인 단계를 지정합니다. 장벽 전후에 지정할 수 있는 파이프라인 단계는 장벽 전후에 리소스를 사용하는 방법에 따라 다릅니다. 허용된 값은 사양의 이 표에 나열되어 있습니다. 예를 들어 장벽 이후의 유니폼에서 읽으려는 경우 VK_ACCESS_UNIFORM_READ_BIT의 사용법과 파이프라인 단계로 유니폼에서 읽을 가장 빠른 셰이더를 지정합니다(예: VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT). 이러한 유형의 사용에 대해 비셰이더 파이프라인 단계를 지정하는 것은 의미가 없으며 사용 유형과 일치하지 않는 파이프라인 단계를 지정할 때 유효성 검사 계층에서 경고합니다. 세 번째 매개변수는 0 또는 VK_DEPENDENCY_BY_REGION_BIT입니다.후자는 장벽을 지역별 조건으로 바꿉니다.이는 예를 들어 지금까지 작성된 리소스 부분에서 구현이 이미 읽기를 시작할 수 있음을 의미합니다. 마지막 세 쌍의 매개변수는 메모리 장벽, 버퍼 메모리 장벽 및 여기에서 사용하는 것과 같은 이미지 메모리 장벽의 세 가지 사용 가능한 유형의 파이프라인 장벽 배열을 참조합니다.우리는 아직 VkFormat 매개변수를 사용하지 않고 있지만 깊이 버퍼 장에서 특별한 전환을 위해 이 매개변수를 사용할 것입니다.
+        // 배리어는 주로 동기화 목적으로 사용되므로 배리어보다 먼저 발생해야 하는 리소스와 관련된 작업 유형과 배리어에서 기다려야 하는 리소스와 관련된 작업을 지정해야 합니다. 수동으로 동기화하기 위해 이미 vkQueueWaitIdle을 사용하고 있음에도 불구하고 이를 수행해야 합니다. 올바른 값은 이전 레이아웃과 새 레이아웃에 따라 다르므로 사용할 트랜지션을 파악한 후 다시 이 값으로 돌아갑니다. 모든 유형의 파이프라인 장벽은 동일한 기능을 사용하여 제출됩니다. 명령 버퍼 뒤의 첫 번째 매개변수는 장벽 이전에 발생해야 하는 작업이 어느 파이프라인 단계에서 발생하는지 지정합니다. 두 번째 매개변수는 작업이 장벽에서 대기하는 파이프라인 단계를 지정합니다. 장벽 전후에 지정할 수 있는 파이프라인 단계는 장벽 전후에 리소스를 사용하는 방법에 따라 다릅니다. (참고: https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/chap7.html#synchronization-access-types-supported) 예를 들어 장벽 이후의 유니폼에서 읽으려는 경우 VK_ACCESS_UNIFORM_READ_BIT 를 설정하고 파이프라인 단계에서 유니폼에서 읽을 가장 빠른 셰이더를 지정합니다 (예: VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT). 이러한 유형의 사용에 대해 비셰이더 파이프라인 단계를 지정하는 것은 의미가 없으며 사용 유형과 일치하지 않는 파이프라인 단계를 지정할 때 유효성 검사 계층에서 경고합니다. 세 번째 매개변수는 0 또는 VK_DEPENDENCY_BY_REGION_BIT입니다. 후자는 장벽을 지역별 조건으로 바꿉니다. 이는 예를 들어 지금까지 작성된 리소스 부분에서 구현이 이미 읽기를 시작할 수 있음을 의미합니다. 마지막 세 쌍의 매개변수는 메모리 장벽, 버퍼 메모리 장벽 및 여기에서 사용하는 것과 같은 이미지 메모리 장벽의 세 가지 사용 가능한 유형의 파이프라인 장벽 배열을 참조합니다. 우리는 아직 VkFormat 매개변수를 사용하지 않고 있지만 깊이 버퍼 장에서 특별한 트랜지션을 위해 이 매개변수를 사용할 것입니다.
         vkCmdPipelineBarrier(
             commandBuffer,
             sourceStage, destinationStage,
@@ -1750,12 +1754,16 @@ private:
     // @@@
     HELPER_FUNCTION void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
     {
+        // createTextureImage로 돌아가기 전에 도우미 함수 copyBufferToImage를 하나 더 작성합니다. 버퍼 복사와 마찬가지로 버퍼의 어느 부분을 이미지의 어느 부분으로 복사할지 지정해야 합니다. 이것은 VkBufferImageCopy 구조체를 통해 설정합니다.
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
         VkBufferImageCopy region{};
+        // bufferOffset은 픽셀 값이 시작되는 버퍼의 바이트 오프셋을 지정합니다.
         region.bufferOffset = 0;
+        // bufferRowLength 및 bufferImageHeight 필드는 픽셀이 메모리에 배치되는 방식을 지정합니다. 예를 들어 이미지 행 사이에 패딩 바이트가 있을 수 있습니다. 둘 다에 대해 0을 지정하면 픽셀이 우리의 경우처럼 단순히 빽빽하게 채워져 있음을 나타냅니다. 
         region.bufferRowLength = 0;
         region.bufferImageHeight = 0;
+        // imageSubresource, imageOffset 및 imageExtent 필드는 픽셀을 복사하려는 이미지 일부분을 나타냅니다.
         region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         region.imageSubresource.mipLevel = 0;
         region.imageSubresource.baseArrayLayer = 0;
@@ -1767,6 +1775,7 @@ private:
             1
         };
 
+        // 네 번째 매개변수는 이미지가 현재 사용 중인 레이아웃을 나타냅니다. 여기에서 이미지가 이미 픽셀 복사에 최적인 레이아웃으로 전환되었다고 가정합니다. 지금은 픽셀의 한 청크만 전체 이미지에 복사하고 있지만 VkBufferImageCopy 배열을 지정하여 이 버퍼에서 이미지로 한 번의 작업으로 다양한 복사를 수행할 수 있습니다.
         vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
         endSingleTimeCommands(commandBuffer);
