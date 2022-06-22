@@ -1627,10 +1627,13 @@ private:
         // 1. 텍스처 이미지를 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL로 전환
         // 2. 버퍼에서 이미지 복사 작업 실행
         // 이것은 방금 만든 transitionImageLayout 함수로 쉽게 수행할 수 있습니다.
+        // 이미지는 VK_IMAGE_LAYOUT_UNDEFINED 레이아웃으로 생성되었으므로 textureImage를 전환할 때 이전 레이아웃을 지정해야 합니다. 복사 작업을 수행하기 전에 그 컨텐츠에 대해 신경 쓰지 않아도 되기 때문에 이렇게 작업을 수행할 수 있음을 기억하십시오.
         transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        // 셰이더의 텍스처 이미지에서 샘플링을 시작하려면 셰이더 액세스를 준비하기 위해 마지막 트랜지션이 하나 필요합니다.
         transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
+        // 마지막에 스테이징 버퍼와 메모리를 정리하여 createTextureImage 함수를 종료합니다.
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
@@ -1691,7 +1694,7 @@ private:
         vkBindImageMemory(device, image, imageMemory, 0);
     }
 
-    // @@@
+    // 이미지 레이아웃 트랜지션을 구성하는 함수
     HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
     {
         // 이제 우리가 작성할 함수는 명령 버퍼를 다시 기록하고 실행하는 것과 관련이 있으므로 이제 해당 로직을 헬퍼 함수 한두개에 옮기기에 좋은 시간입니다. 여전히 버퍼를 사용하고 있었다면 이제 vkCmdCopyBufferToImage를 기록하고 실행하여 작업을 완료하는 함수를 작성할 수 있지만 이 명령을 사용하려면 먼저 이미지가 올바른 레이아웃에 있어야 합니다. 레이아웃 전환을 처리하는 새 함수를 만듭니다.
@@ -1714,9 +1717,14 @@ private:
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
+        // 지금 유효성 검사 레이어가 활성화된 상태에서 애플리케이션을 실행하면 transitionImageLayout의 액세스 마스크 및 파이프라인 단계가 유효하지 않다고 불평하는 것을 볼 수 있습니다. 전환 레이아웃을 기반으로 설정해야 합니다.
+        // 처리해야 하는 두 가지 전환이 있습니다.
+        // 1. Undefined → transfer destination : 아무것도 기다릴 필요가 없는 전송 쓰기
+        // 2. Transfer destination → shader reading : 셰이더 읽기는 전송 쓰기를 기다려야 합니다.특히 셰이더는 프래그먼트 셰이더에서 읽어야 합니다.왜냐하면 그곳에서 텍스처를 사용할 것이기 때문입니다. 이러한 규칙은 다음 액세스 마스크 및 파이프라인 단계를 사용하여 지정됩니다.
         VkPipelineStageFlags sourceStage;
         VkPipelineStageFlags destinationStage;
 
+        // 앞서 언급한 표에서 볼 수 있듯이 전송 쓰기는 파이프라인 전송 단계에서 발생해야 합니다. 쓰기는 아무 것도 기다릴 필요가 없으므로 사전 장벽 작업에 대해 빈 액세스 마스크와 가능한 가장 빠른 파이프라인 단계 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT를 지정할 수 있습니다. VK_PIPELINE_STAGE_TRANSFER_BIT는 그래픽 및 컴퓨팅 파이프라인 내의 실제 단계가 아닙니다. 전송이 발생하는 의사 단계에 가깝습니다. 의사 단계에 대한 자세한 정보 및 기타 예는 https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/chap7.html#VkPipelineStageFlagBits 를 참조하십시오. 이미지는 동일한 파이프라인 단계에서 작성되고 이후에 프래그먼트 셰이더에 의해 읽히므로 프래그먼트 셰이더 파이프라인 단계에서 셰이더 읽기 액세스를 지정합니다. 앞으로 더 많은 전환을 수행해야 하는 경우 기능을 확장할 것입니다.물론 아직 시각적인 변경 사항은 없지만 응용 프로그램이 성공적으로 실행되어야 합니다. 한 가지 주의할 점은 명령 버퍼 제출이 시작 시 암시적인 VK_ACCESS_HOST_WRITE_BIT 동기화를 발생시킨다는 것입니다.transitionImageLayout 함수는 단일 명령으로 명령 버퍼를 실행하므로 레이아웃 전환에서 VK_ACCESS_HOST_WRITE_BIT 종속성이 필요한 경우 이 암시적 동기화를 사용하고 srcAccessMask를 0으로 설정할 수 있습니다.그것에 대해 명시적으로 원하는지 여부는 사용자에게 달려 있지만 저는 개인적으로 이러한 OpenGL과 같은 "숨겨진" 작업에 의존하는 것을 좋아하지 않습니다. 실제로 모든 작업을 지원하는 특별한 유형의 이미지 레이아웃인 VK_IMAGE_LAYOUT_GENERAL이 있습니다. 물론 문제는 모든 작업에 대해 반드시 최상의 성능을 제공하지는 않는다는 것입니다. 이미지를 입력 및 출력으로 사용하거나 미리 초기화된 레이아웃을 떠난 후 이미지를 읽는 것과 같은 일부 특수한 경우에 필요합니다. 지금까지 명령을 제출하는 모든 도우미 함수는 대기열이 유휴 상태가 될 때까지 대기하여 동기적으로 실행되도록 설정되었습니다. 실제 응용 프로그램의 경우 이러한 작업을 단일 명령 버퍼에서 결합하고 더 높은 처리량, 특히 createTextureImage 함수의 전환 및 복사를 위해 비동기적으로 실행하는 것이 좋습니다. 헬퍼 함수가 명령을 기록하는 setupCommandBuffer를 생성하여 이것을 실험하고 지금까지 기록된 명령을 실행하기 위해 flushSetupCommands를 추가하십시오. 텍스처 매핑이 작동하여 텍스처 리소스가 여전히 올바르게 설정되어 있는지 확인한 후에 이 작업을 수행하는 것이 가장 좋습니다.
         if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
         {
             barrier.srcAccessMask = 0;
@@ -1751,7 +1759,7 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
-    // @@@
+    // 버퍼를 받아 이미지 형태로 복사하는 함수
     HELPER_FUNCTION void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
     {
         // createTextureImage로 돌아가기 전에 도우미 함수 copyBufferToImage를 하나 더 작성합니다. 버퍼 복사와 마찬가지로 버퍼의 어느 부분을 이미지의 어느 부분으로 복사할지 지정해야 합니다. 이것은 VkBufferImageCopy 구조체를 통해 설정합니다.
@@ -2496,7 +2504,7 @@ private:
         vkDestroySampler(device, textureSampler, nullptr);
         vkDestroyImageView(device, textureImageView, nullptr);
 
-        // @@@
+        // 기본 텍스처 이미지는 프로그램이 끝날 때까지 사용됩니다. 이제 이미지는 텍스처를 포함하지만 그래픽 파이프라인에서 액세스할 수 있는 방법이 여전히 필요합니다. 다음 장에서 이에 대해 다룰 것입니다.
         vkDestroyImage(device, textureImage, nullptr);
         vkFreeMemory(device, textureImageMemory, nullptr);
 
