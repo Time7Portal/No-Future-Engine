@@ -354,7 +354,7 @@ private:
 
         createTextureImage();           // 2-12. 이미지(텍스쳐) 파일 로드
 
-        createTextureImageView();       // 2-13. @@@@@@
+        createTextureImageView();       // 2-13. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
 
         createTextureSampler();         // 2-14. @@@@@@
 
@@ -1005,41 +1005,12 @@ private:
 
         for (size_t i = 0; i < swapChainImages.size(); i++)
         {
-            // @@@@@@
+            // createImageViews 의 이미지 뷰를 생성하는 코드가 여러 곳에서도 비슷하게 사용되기 때문에 createImageView 함수로 분리하여 재사용 하였습니다.
             swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat);
-
-
-            /* --- 위 createImageView 에 함수로 분리된 기능임 ---
-            // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
-            VkImageViewCreateInfo createInfo{};
-            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            createInfo.image = swapChainImages[i];
-            // viewType 과 format 은 어떻게 이미지 데이터가 해석될지 지정합니다.
-            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D; // 1D, 2D, 3D 텍스쳐나 큐브 맵도 될 수 있습니다.
-            createInfo.format = swapChainImageFormat;
-            // components 설정값을 사용하면 RGBA 색상 채널을 GGBA 처럼 막 섞을 수 있습니다. 예를 들어 모노크롬 텍스처의 경우 모든 채널을 빨간색 채널에 매핑할 수 있습니다. - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkComponentSwizzle.html
-            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            // subresourceRange는 이미지의 목적이 무엇이며 액세스해야 하는 이미지 부분을 설명합니다. 우리의 이미지는 밉매핑 레벨이나 다중 레이어 없이 색상 대상으로 사용됩니다.
-            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 칼라 타겟으로 사용
-            createInfo.subresourceRange.baseMipLevel = 0; // 밉맵 없음
-            createInfo.subresourceRange.levelCount = 1; // 밉맵 계층 갯수
-            // 스테레오그래픽 3D 응용 프로그램에서는 여러 레이어가 있는 스왑 체인을 만들 것입니다. 그런 다음 다른 레이어에 액세스하여 왼쪽 및 오른쪽 눈의 보기를 나타내는 각 이미지에 대해 여러 이미지 뷰를 만들 수 있습니다.
-            createInfo.subresourceRange.baseArrayLayer = 0; // 뷰에 보여질 첫번째 배열 레이어
-            createInfo.subresourceRange.layerCount = 1; // 배열 레이어 수
-
-            // 이미지 뷰 개체를 만들고 핸들을 받습니다.
-            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS)
-            {
-                throw std::runtime_error("Failed to create image views!");
-            }
-            */
         }
     }
 
-    // @@@@@@
+    // 이미지 뷰를 생성하는 헬퍼 함수
     HELPER_FUNCTION VkImageView createImageView(VkImage image, VkFormat format)
     {
         // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
@@ -1050,10 +1021,10 @@ private:
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = format;
         // components 설정값을 사용하면 RGBA 색상 채널을 GGBA 처럼 막 섞을 수 있습니다. 예를 들어 모노크롬 텍스처의 경우 모든 채널을 빨간색 채널에 매핑할 수 있습니다. - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkComponentSwizzle.html
-        viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
+        viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
+        viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
+        viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
         // subresourceRange는 이미지의 목적이 무엇이며 액세스해야 하는 이미지 부분을 설명합니다. 우리의 이미지는 밉매핑 레벨이나 다중 레이어 없이 색상 대상으로 사용됩니다.
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 칼라 타겟으로 사용
         viewInfo.subresourceRange.baseMipLevel = 0; // 밉맵 없음
@@ -1694,7 +1665,7 @@ private:
         vkBindImageMemory(device, image, imageMemory, 0);
     }
 
-    // 이미지 레이아웃 트랜지션을 구성하는 함수
+    // 이미지 레이아웃 전환(트랜지션)을 구성하는 함수
     HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
     {
         // 이제 우리가 작성할 함수는 명령 버퍼를 다시 기록하고 실행하는 것과 관련이 있으므로 이제 해당 로직을 헬퍼 함수 한두개에 옮기기에 좋은 시간입니다. 여전히 버퍼를 사용하고 있었다면 이제 vkCmdCopyBufferToImage를 기록하고 실행하여 작업을 완료하는 함수를 작성할 수 있지만 이 명령을 사용하려면 먼저 이미지가 올바른 레이아웃에 있어야 합니다. 레이아웃 전환을 처리하는 새 함수를 만듭니다.
@@ -1791,38 +1762,59 @@ private:
 
 
 
-    // @@@@@@
+    // 2-13. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
     inline void createTextureImageView()
     {
+        // 이 장에서는 그래픽 파이프라인이 이미지를 샘플링하는 데 필요한 리소스를 두 개 더 만들 것입니다. 첫 번째 리소스는 이전에 스왑 체인 이미지에서 이미 본 것이지만 두 번째 리소스는 새로운 것입니다. 이는 셰이더가 이미지에서 텍셀을 읽는 방법과 관련이 있습니다. 이전에 스왑 체인 이미지와 프레임 버퍼를 사용하여 이미지에 직접 액세스하지 않고 이미지 뷰를 통해 액세스하는 것을 보았습니다. 또한 텍스처 이미지에 대해 이러한 이미지 뷰를 생성해야 합니다. 텍스처 이미지에 대한 VkImageView를 보유할 클래스 멤버 textureImageView를 추가하고 이를 생성할 새 함수 createTextureImageView를 만듭니다.
         textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB);
     }
 
 
 
-    // @@@@@@
+    // 2-14. 텍스쳐를 샘플링 하기 위해 샘플러 객체를 생성합니다. (이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.)
     inline void createTextureSampler()
     {
+        // 셰이더가 이미지에서 직접 텍셀을 읽는 것도 가능하지만 텍스처로 사용되는 경우에는 그리 일반적이지 않습니다. 텍스쳐는 일반적으로 최종 색상을 계산하기 위한 필터링 및 변환을 적용하는 샘플러를 통해 액세스됩니다. 이러한 필터는 오버샘플링과 같은 문제를 처리하는 데 유용합니다. 텍스쳐를 단순한 텍셀보다는 지오메트리에 매핑된 프레그먼트로 간주하는 것이 좋습니다. 각 프래그먼트의 텍스처 좌표에 대해 가장 가까운 텍셀을 사용하기만 한다면 https://vulkan-tutorial.com/images/texture_filtering.png 에서 No filtering 이미지 예시와 같은 결과를 얻을 수 있습니다. 하지만 선형 보간법을 통해 가장 가까운 4개의 텍셀을 결합하면 오른쪽과 같이 더 부드러운 결과를 얻을 수 있습니다. 물론 응용 프로그램에 따라 No filtering 스타일에 더 적합한 아트 스타일이 요구될 수 있지만(Minecraft 처럼), 기존 그래픽 응용 프로그램에서는 filtering 방식이 선호됩니다. 샘플러 개체는 텍스처에서 색상을 읽을 때 자동으로 이 필터링을 적용합니다. 반면에 언더샘플링은 반대로 프레그먼츠보다 텍셀이 더 많을 때 발생하는 문제입니다. 낮은 각도에서 바둑판 텍스처와 같은 고주파수 패턴을 샘플링할 때 아티팩트가 발생합니다. https://vulkan-tutorial.com/images/anisotropic_filtering.png 왼쪽 이미지와 같이 멀리 갈수록 텍셀 밀도에 비해 프레그먼트 밀도가 낮아 흐릿하게 보입니다. 이에 대한 솔루션은 샘플러에 의해 자동으로 적용될 수도 있는 등방성 필터링입니다. 이러한 필터 외에도 샘플러는 변환을 처리할 수도 있습니다. addressing mode를 통해 이미지 해상도를 넘는 텍셀을 읽으려고 할 때 어떤 일이 발생하는지 결정합니다. https://vulkan-tutorial.com/images/texture_addressing.png 예시에서 몇 가지 가능성을 보여줍니다. 이제 이러한 샘플러 객체를 설정하기 위해 createTextureSampler 함수를 생성하였습니다. 이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.
+
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
 
+        // 샘플러는 적용해야 하는 모든 필터와 변환을 지정하는 VkSamplerCreateInfo 구조체를 통해 설정됩니다.
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        // magFilter 및 minFilter 필드는 확대 또는 축소된 텍셀을 보간하는 방법을 지정합니다. 확대는 위에서 설명한 오버샘플링 문제와 관련되고 축소는 언더샘플링과 관련이 있습니다. 위의 이미지에 표시된 모드에 해당하는 VK_FILTER_NEAREST 및 VK_FILTER_LINEAR를 선택할 수 있습니다.
         samplerInfo.magFilter = VK_FILTER_LINEAR;
         samplerInfo.minFilter = VK_FILTER_LINEAR;
+        // addressMode 필드를 사용하여 축별로 주소 지정 모드를 지정할 수 있습니다. 사용 가능한 값은 아래에 나열되어 있습니다. 이들 대부분은 위의 이미지에 나와 있습니다. 축은 X, Y, Z 대신 U, V, W라고 합니다. 이것은 텍스처 공간 좌표에 대한 규칙입니다.
+        // 1. VK_SAMPLER_ADDRESS_MODE_REPEAT: 이미지 크기를 넘어갈 때 텍스처를 반복합니다.
+        // 2. VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT : 반복과 비슷하지만 치수를 벗어날 때 이미지를 미러링하기 위해 좌표를 반전합니다.
+        // 3. VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE : 이미지 치수를 넘어 좌표에 가장 가까운 가장자리의 색상을 가져옵니다.
+        // 4. VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE : 가장자리에 고정과 유사하지만 대신 가장 가까운 가장자리의 반대쪽 가장자리를 사용합니다.
+        // 5. VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER : 이미지 크기 이상으로 샘플링할 때 단색을 반환합니다.
+        // 여기에서 사용하는 주소 지정 모드는 중요하지 않습니다.이 자습서에서는 이미지 해상도를 벗어나는 영역을 샘플링하지 않을 것이기 때문입니다. 그러나 반복 모드는 바닥과 벽과 같은 질감을 타일링하는 데 사용할 수 있기 때문에 아마도 가장 일반적인 모드일 것입니다.
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        // 아래 두 필드는 등방성 필터링을 사용해야 하는지 여부를 지정합니다. 성능이 문제가 되지 않는 한 이것을 사용하지 않을 이유가 없습니다. maxAnisotropy 필드는 최종 색상을 계산하는 데 사용할 수 있는 텍셀 샘플의 양을 제한합니다. 값이 낮을수록 성능은 향상되지만 품질은 낮아집니다. 어떤 값을 사용할 수 있는지 알아내려면 다음과 같이 물리적 장치의 속성을 검색해야 합니다. 프로그램 시작 부분에서 속성을 쿼리하고 속성을 필요로 하는 함수에 전달하거나 createTextureSampler 함수 자체에서 쿼리할 수 있습니다.
         samplerInfo.anisotropyEnable = VK_TRUE;
         samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        // borderColor 필드는 border addressing 모드로 클램프를 사용하여 이미지 해상도를 넘어 샘플링할 때 반환되는 색상을 지정합니다. float 또는 int 형식으로 검정, 흰색 또는 투명을 반환하는 것이 가능합니다. 임의의 색상을 지정할 수 없습니다.
         samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        // unnormalizedCoordinates 필드는 이미지의 텍셀을 처리하는 데 사용할 좌표계를 지정합니다. 이 필드가 VK_TRUE이면 [0, texWidth) 및 [0, texHeight) 범위 내의 좌표를 간단히 사용할 수 있습니다. VK_FALSE이면 모든 축에서 [0, 1) 범위를 사용하여 텍셀의 주소가 지정됩니다. 실제 응용 프로그램은 거의 항상 정규화된 좌표를 사용합니다. 그러면 정확히 동일한 좌표로 다양한 해상도의 텍스처를 사용할 수 있기 때문입니다.
         samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        // 비교 기능이 활성화되면 텍셀이 먼저 값과 비교되고 해당 비교 결과가 필터링 작업에 사용됩니다. 이것은 주로 섀도우 맵에서 percentage-closer filtering에 사용됩니다. 이에 대해서는 다음 장에서 살펴보겠습니다. https://developer.nvidia.com/gpugems/GPUGems/gpugems_ch11.html
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        // 이 모든 필드는 밉매핑에 적용됩니다. 다음 장에서 밉매핑에 대해 살펴보겠지만 기본적으로 적용할 수 있는 또 다른 유형의 필터입니다. 이제 샘플러의 기능이 완전히 정의되었습니다. 샘플러 개체의 핸들을 보유할 클래스 멤버를 추가하고 vkCreateSampler를 사용하여 샘플러를 생성합니다.
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samplerInfo.mipLodBias = 0.0f; // Optional
+        samplerInfo.minLod = 0.0f; // Optional
+        samplerInfo.maxLod = 0.0f; // Optional
 
+        // 샘플러는 어디에서도 VkImage를 참조하지 않습니다. 샘플러는 텍스처에서 색상을 추출하는 인터페이스를 제공하는 별개의 개체입니다. 1D, 2D, 3D 등 원하는 모든 이미지에 적용할 수 있습니다. 이는 텍스처 이미지와 필터링을 단일 상태로 결합한 많은 이전 API와 다릅니다.
         if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create texture sampler!");
+            throw std::runtime_error("Failed to create texture sampler!");
         }
     }
 
@@ -2500,8 +2492,9 @@ private:
         // 디스크립터 풀이 파괴되면 디스크립터 세트는 자동으로 소멸되므로 디스크립터 세트를 명시적으로 정리할 필요가 없습니다. vkAllocateDescriptorSets에 대한 호출은 각각 하나의 유니폼 버퍼 디스크립터가 있는 디스크립터 세트를 할당합니다.
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-        // @@@@@@
+        // 더 이상 이미지에 액세스할 필요가 없을 때 샘플러를 정리합니다.
         vkDestroySampler(device, textureSampler, nullptr);
+        // 이미지 자체를 지우기 전에 이미지 뷰를 우선 정리해야 합니다.
         vkDestroyImageView(device, textureImageView, nullptr);
 
         // 기본 텍스처 이미지는 프로그램이 끝날 때까지 사용됩니다. 이제 이미지는 텍스처를 포함하지만 그래픽 파이프라인에서 액세스할 수 있는 방법이 여전히 필요합니다. 다음 장에서 이에 대해 다룰 것입니다.
