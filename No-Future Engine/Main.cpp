@@ -1178,7 +1178,7 @@ private:
         // 그런 다음 vkCreateDescriptorSetLayout을 사용하여 생성할 수 있습니다. 이 함수는 바인딩 배열과 함께 간단한 VkDescriptorSetLayoutCreateInfo를 허용합니다.
         if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create descriptor set layout!");
+            throw std::runtime_error("Failed to create descriptor set layout!");
         }
     }
 
@@ -1484,7 +1484,7 @@ private:
         VkShaderModule shaderModule;
         if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create shader module!");
+            throw std::runtime_error("Failed to create shader module!");
         }
 
         // 만들어진 셰이더 모듈의 핸들을 반환합니다.
@@ -1959,7 +1959,7 @@ private:
         descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
         if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to allocate descriptor sets!");
+            throw std::runtime_error("Failed to allocate descriptor sets!");
         }
 
         // 디스크립터 세트는 지금 할당되었지만 그 안에 있는 디스크립터는 여전히 구성해야 합니다. 이제 모든 디스크립터를 순회하며 설정값을 채우는 루프를 추가합니다. 유니폼 버퍼 디스크립터와 같이 버퍼를 참조하는 디스크립터는 VkDescriptorBufferInfo 구조체로 구성됩니다. 이 구조체는 디스크립터에 대한 데이터를 포함하는 버퍼와 버퍼 내의 영역을 지정합니다.
@@ -2154,7 +2154,7 @@ private:
         // 커맨드 버퍼를 생성합니다.
         if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to allocate command buffers!");
+            throw std::runtime_error("Failed to allocate command buffers!");
         }
     }
 
