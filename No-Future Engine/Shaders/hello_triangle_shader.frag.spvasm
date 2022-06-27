@@ -1,7 +1,7 @@
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Google Shaderc over Glslang; 10
-; Bound: 32
+; Bound: 35
 ; Schema: 0
                OpCapability Shader
           %1 = OpExtInstImport "GLSL.std.450"
@@ -30,27 +30,30 @@
     %v3float = OpTypeVector %float 3
 %_ptr_Input_v3float = OpTypePointer Input %v3float
   %fragColor = OpVariable %_ptr_Input_v3float Input
-    %float_1 = OpConstant %float 1
 %float_0_200000003 = OpConstant %float 0.200000003
-         %21 = OpTypeImage %float 2D 0 0 0 1 Unknown
-         %22 = OpTypeSampledImage %21
-%_ptr_UniformConstant_22 = OpTypePointer UniformConstant %22
- %texSampler = OpVariable %_ptr_UniformConstant_22 UniformConstant
+         %16 = OpTypeImage %float 2D 0 0 0 1 Unknown
+         %17 = OpTypeSampledImage %16
+%_ptr_UniformConstant_17 = OpTypePointer UniformConstant %17
+ %texSampler = OpVariable %_ptr_UniformConstant_17 UniformConstant
     %v2float = OpTypeVector %float 2
 %_ptr_Input_v2float = OpTypePointer Input %v2float
 %fragTexCoord = OpVariable %_ptr_Input_v2float Input
+    %float_2 = OpConstant %float 2
+    %float_1 = OpConstant %float 1
        %main = OpFunction %void None %3
           %5 = OpLabel
          %13 = OpLoad %v3float %fragColor
-         %15 = OpCompositeExtract %float %13 0
-         %16 = OpCompositeExtract %float %13 1
-         %17 = OpCompositeExtract %float %13 2
-         %18 = OpCompositeConstruct %v4float %15 %16 %17 %float_1
-         %20 = OpVectorTimesScalar %v4float %18 %float_0_200000003
-         %25 = OpLoad %22 %texSampler
-         %29 = OpLoad %v2float %fragTexCoord
-         %30 = OpImageSampleImplicitLod %v4float %25 %29
-         %31 = OpFAdd %v4float %20 %30
-               OpStore %outColor %31
+         %15 = OpVectorTimesScalar %v3float %13 %float_0_200000003
+         %20 = OpLoad %17 %texSampler
+         %24 = OpLoad %v2float %fragTexCoord
+         %26 = OpVectorTimesScalar %v2float %24 %float_2
+         %27 = OpImageSampleImplicitLod %v4float %20 %26
+         %28 = OpVectorShuffle %v3float %27 %27 0 1 2
+         %29 = OpFAdd %v3float %15 %28
+         %31 = OpCompositeExtract %float %29 0
+         %32 = OpCompositeExtract %float %29 1
+         %33 = OpCompositeExtract %float %29 2
+         %34 = OpCompositeConstruct %v4float %31 %32 %33 %float_1
+               OpStore %outColor %34
                OpReturn
                OpFunctionEnd

@@ -113,9 +113,9 @@ struct SwapChainSupportDetails
 // 버텍스 셰이더에 넣을 버텍스 정보를 담고 있는 구조체
 struct Vertex
 {
-    glm::vec2 position;
-    glm::vec3 color;
-    glm::vec2 texCoord;
+    glm::vec2 position;     // 버텍스 위치
+    glm::vec3 color;        // 버텍스 색상
+    glm::vec2 texCoord;     // 텍스쳐 UV 좌표값
 
     // 버텍스 데이터들을 GPU 메모리에 업로드할때 버텍스 셰이더에 어떤 형태로 전달하면 될지 Vulkan에 알리는 것입니다. 이 정보를 전달하는 데 필요한 구조에는 두 가지 유형이 있습니다.
     // 첫 번째 구조는 VkVertexInputBindingDescription이며 올바른 데이터로 채우기 위해 Vertex 구조 정보를 반환하는 멤버 함수를 추가합니다.
@@ -198,9 +198,9 @@ struct UniformBufferObject
 
 
 // GLM 은 사용하기 편하도록 셰이더 언어에서 사용되는 벡터 타입과 정확히 일치하는 C++ 타입을 제공합니다.
-// interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상} }
+// interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상}, {텍스쳐 UV 위치} }
 const std::vector<Vertex> vertices = {
-    // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다.
+    // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다. 텍스처 좌표에 대한 vec2를 포함하도록 Vertex 구조체를 수정합니다. 정점 셰이더에서 입력으로 텍스처 좌표에 액세스할 수 있도록 VkVertexInputAttributeDescription도 추가해야 합니다. 정사각형 표면을 가로지르는 보간을 위해 프래그먼트 셰이더에 전달할 수 있어야 합니다. 이 튜토리얼에서는 왼쪽 상단 모서리의 0, 0에서 오른쪽 하단 모서리의 1, 1까지의 좌표를 사용하여 사각형을 텍스처로 채울 것입니다. 다양한 좌표로 자유롭게 실험해 보세요. 0보다 작거나 1보다 큰 좌표를 사용하여 주소 지정 모드가 작동하는지 확인하십시오!
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
     {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
     {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
@@ -1161,12 +1161,13 @@ private:
         // 또한 디스크립터가 참조할 셰이더 스테이지를 지정해야 합니다. stageFlags 필드는 VkShaderStageFlagBits 값들의 조합 또는 VK_SHADER_STAGE_ALL_GRAPHICS 값이 될 수 있습니다. 우리는 현재 버텍스 셰이더의 디스크립터만 참조합니다.
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-        // @@@@@@@@@
+        // 유니폼 버퍼 강의 부분에서 이미 디스크립터를 살펴본 적이 있습니다. 이 장에서는 새로운 유형의 디스크립터인 combined image sampler를 살펴보겠습니다. 이 디스크립터를 사용하면 셰이더가 이전 장에서 만든 샘플러 개체를 통해 이미지 리소스에 액세스할 수 있습니다. 이렇게 결합된 이미지 샘플러 디스크립터를 포함하도록 디스크립터 레이아웃, 디스크립터 풀 및 디스크립터 세트를 수정하는 것으로 시작하겠습니다. 그런 다음 정점에 텍스처 좌표를 추가하고 정점 색상을 보간하는 대신 텍스처에서 색상을 읽도록 프래그먼트 셰이더를 수정하겠습니다.
         VkDescriptorSetLayoutBinding samplerLayoutBinding{};
         samplerLayoutBinding.binding = 1;
         samplerLayoutBinding.descriptorCount = 1;
         samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         samplerLayoutBinding.pImmutableSamplers = nullptr;
+        // 프래그먼트 셰이더에서 결합된 이미지 샘플러 디스크립터를 사용할 것임을 나타내도록 stageFlags를 설정해야 합니다. 그것이 프레그먼트(조각)의 색상이 결정되는 곳입니다. 정점 셰이더에서 텍스처 샘플링을 사용하는 것도 가능합니다. 예를 들어 하이트맵에 의해 버텍스 격자를 동적으로 변형하는 것입니다.
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
@@ -1924,8 +1925,10 @@ private:
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        // 또한 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER 유형의 다른 VkPoolSize를 VkDescriptorPoolCreateInfo에 추가하여 결합된 이미지 샘플러 할당을 위한 공간을 만들기 위해 더 큰 디스크립터 풀을 만들어야 합니다. 이 디스크립터를 포함하도록 VkDescriptorPoolSize를 수정합니다.
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        // 불충분한 디스크립터 풀은 유효성 검사 계층이 포착하지 못하는 문제의 좋은 예입니다. Vulkan 1.1부터 vkAllocateDescriptorSets는 풀이 충분히 크지 않은 경우 오류 코드 VK_ERROR_POOL_OUT_OF_MEMORY와 함께 실패할 수 있지만 드라이버는 내부적으로 문제를 해결하려고 할 수도 있습니다. 이것은 때때로 (하드웨어, 풀 크기 및 할당 크기에 따라) 드라이버가 디스크립터 풀의 한계를 초과하는 할당을 허용할 수 있음을 의미합니다. 다른 경우에는 vkAllocateDescriptorSets를 실패하고 VK_ERROR_POOL_OUT_OF_MEMORY를 반환합니다. 할당이 일부 시스템에서는 성공하지만 다른 시스템에서는 실패하는 경우가 가능하므로 이 부분이 특히 혼란스러울 수 있습니다. Vulkan은 할당에 대한 책임을 드라이버에 전가하기 때문에 더 이상 특정 유형(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER 등)의 디스크립터를 디스크립터 풀 생성을 위해 해당 descriptorCount 멤버가 지정한 만큼만 할당해야 한다는 것은 엄격한 요구 사항이 아닙니다. 그러나 그렇게 하는 것이 모범적이며 Best Practice Validation 검증을 활성화 한 경우 VK_LAYER_KHRONOS_validation이 이러한 유형의 문제에 대해 경고해줄 것입니다.
 
         // 우리는 매 프레임마다 이러한 디스크립터들 중 하나를 할당하게 됩니다. 이 풀 크기 구조는 기본 VkDescriptorPoolCreateInfo에서 참조합니다.
         VkDescriptorPoolCreateInfo poolInfo{};
@@ -1970,6 +1973,7 @@ private:
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(UniformBufferObject);
 
+            // 마지막 단계는 실제 이미지 및 샘플러 리소스를 디스크립터 세트 안의 디스크립터에 바인딩하는 것입니다.
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             imageInfo.imageView = textureImageView;
@@ -1978,6 +1982,7 @@ private:
             // 이 경우처럼 전체 버퍼를 덮어쓰는 경우 범위에 대해 VK_WHOLE_SIZE 값을 사용할 수도 있습니다. 디스크립터의 구성은 VkWriteDescriptorSet 구조체의 배열을 매개변수로 사용하는 vkUpdateDescriptorSets 함수를 사용하여 업데이트 됩니다. 2개를 사용할 것이므로 배열로 만들어 설정합니다.
             std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
+            // 유니폼 버퍼를 위한 디스크립터 세트를 설정합니다.
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             // 처음 두 필드는 업데이트할 디스크립터 세트와 바인딩을 지정합니다. 유니폼 버퍼 바인딩 인덱스를 0으로 지정했습니다. 
             descriptorWrites[0].dstSet = descriptorSets[i];
@@ -1993,7 +1998,7 @@ private:
             descriptorWrites[0].pImageInfo = nullptr; // Optional
             descriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
-            // 마찬가지로 두번째 디스크립터 세트도 동일한 방식으로 설정합니다.
+            // 마찬가지로 두번째 디스크립터 세트도 동일한 방식으로 설정합니다. 결합된 이미지 샘플러 구조에 대한 리소스는 VkDescriptorBufferInfo 구조체에 유니폼 버퍼 디스크립터에 대한 버퍼 리소스가 지정된 것처럼 VkDescriptorImageInfo 구조체에 지정되어야 합니다. 디스크립터는 버퍼와 마찬가지로 이 이미지 정보로 업데이트되어야 합니다. 이번에는 pBufferInfo 대신 pImageInfo 배열을 사용합니다. 디스크립터는 이제 셰이더에서 사용할 준비가 되었습니다!
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[1].dstSet = descriptorSets[i];
             descriptorWrites[1].dstBinding = 1;

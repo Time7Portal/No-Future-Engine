@@ -33,13 +33,14 @@ layout(binding = 0) uniform UniformBufferObject
 
 
 // 버텍스 버퍼로부터 x, y 위치값과 버텍스 컬러를 전달 받습니다.
-// vec3 가 아닌 dvec3 64비트 벡터는 여러 슬롯을 사용합니다. 이는 그 뒤에 오는 location의 인덱스가 최소 2 이상 높아야 함을 의미합니다. - https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description
+// vec3 가 아닌 dvec3 64비트 벡터는 여러 슬롯을 사용합니다. 이는 그 뒤에 오는 location의 인덱스가 최소 2 이상 높아야 함을 의미합니다. - https://vulkan-tutorial.com/Vertex_buffers/Vertex_input_description 텍스처 좌표를 통해 프래그먼트 셰이더로 전달하도록 정점 셰이더를 수정해야 합니다.
 layout(location = 0) in vec2 inPosition;
 layout(location = 1) in vec3 inColor;
 layout(location = 2) in vec2 inTexCoord; // 텍스쳐 UV 좌표값 추가
 
 
 // 프레그먼트 셰이더로 컬러값을 전달합니다.
+// 버텍스별 색상과 마찬가지로 fragTexCoord 값은 래스터라이저에 의해 정사각형 영역에 걸쳐 부드럽게 보간됩니다. 프래그먼트 셰이더가 텍스처 좌표를 색상으로 출력하도록 하여 이것을 시각화할 수 있습니다.
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 
