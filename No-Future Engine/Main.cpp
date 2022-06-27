@@ -115,7 +115,7 @@ struct Vertex
 {
     glm::vec2 position;
     glm::vec3 color;
-    glm::vec2 texCoord; // @@@@@@@@@
+    glm::vec2 texCoord;
 
     // 버텍스 데이터들을 GPU 메모리에 업로드할때 버텍스 셰이더에 어떤 형태로 전달하면 될지 Vulkan에 알리는 것입니다. 이 정보를 전달하는 데 필요한 구조에는 두 가지 유형이 있습니다.
     // 첫 번째 구조는 VkVertexInputBindingDescription이며 올바른 데이터로 채우기 위해 Vertex 구조 정보를 반환하는 멤버 함수를 추가합니다.
@@ -626,10 +626,15 @@ private:
                     // 현재로썬 윈도우 서피스에 하나 이상의 이미지 포멧과 하나 이상의 프레젠테이션 모드를 지원한다면 충분합니다.
                     swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
                 }
+                
+                // 그래픽카드가 추가 기능들을 지원하는지 확인하기 위해 조사합니다.
+                VkPhysicalDeviceFeatures supportedFeatures;
+                // vkGetPhysicalDeviceFeatures는 boolean 값을 요청하는 것이 아닌 지원되는 기능을 표시하기 위해 VkPhysicalDeviceFeatures 구조체를 그래픽카드 사양에 맞게 가져옵니다.
+                vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
 
                 // 2-3-5. 그래픽카드가 우리가 필요로 하는 모든 기능들을 제공함을 확인하였습니다.
-                return indices.isComplete() && extensionsSupported && swapChainAdequate;
+                return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
             };
 
 
@@ -758,7 +763,7 @@ private:
 
         // 2-4-2. 우리가 사용할 장치의 기능들을 정의합니다. 장치에서 지원하는 모든 기능들은 vkGetPhysicalDeviceFeatures 로 확인 가능합니다. 사실상 지금은 아무런 기능들도 사용하지 않으므로 모든 설정값을 기본(VK_FALSE)으로 두겠습니다.
         VkPhysicalDeviceFeatures deviceFeatures{};
-        // @@@@@@
+        // 이방성 필터링은 선택적인 장치 기능이기 때문에 직접 enable 해야 합니다. 추가로 최신 그래픽 카드가 지원하지 않을 가능성은 매우 낮지만 사용 가능한지 확인하기 위해 isDeviceSuitable을 업데이트해야 합니다.
         deviceFeatures.samplerAnisotropy = VK_TRUE;
 
 
@@ -1795,7 +1800,7 @@ private:
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        // 아래 두 필드는 등방성 필터링을 사용해야 하는지 여부를 지정합니다. 성능이 문제가 되지 않는 한 이것을 사용하지 않을 이유가 없습니다. maxAnisotropy 필드는 최종 색상을 계산하는 데 사용할 수 있는 텍셀 샘플의 양을 제한합니다. 값이 낮을수록 성능은 향상되지만 품질은 낮아집니다. 어떤 값을 사용할 수 있는지 알아내려면 다음과 같이 물리적 장치의 속성을 검색해야 합니다. 프로그램 시작 부분에서 속성을 쿼리하고 속성을 필요로 하는 함수에 전달하거나 createTextureSampler 함수 자체에서 쿼리할 수 있습니다.
+        // 아래 두 필드는 등방성 필터링을 사용해야 하는지 여부를 지정합니다. 성능이 문제가 되지 않는 한 이것을 사용하지 않을 이유가 없습니다. maxAnisotropy 필드는 최종 색상을 계산하는 데 사용할 수 있는 텍셀 샘플의 양을 제한합니다. 값이 낮을수록 성능은 향상되지만 품질은 낮아집니다. 어떤 값을 사용할 수 있는지 알아내려면 다음과 같이 물리적 장치의 속성을 검색해야 합니다. 프로그램 시작 부분에서 속성을 쿼리하고 속성을 필요로 하는 함수에 전달하거나 createTextureSampler 함수 자체에서 쿼리할 수 있습니다. 등방성 필터링을 활성화 하는 대신 samplerInfo.anisotropyEnable = VK_FALSE; samplerInfo.maxAnisotropy = 1.0f; 로 설정하여 단순히 사용하지 않을 수도 있습니다.
         samplerInfo.anisotropyEnable = VK_TRUE;
         samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
         // borderColor 필드는 border addressing 모드로 클램프를 사용하여 이미지 해상도를 넘어 샘플링할 때 반환되는 색상을 지정합니다. float 또는 int 형식으로 검정, 흰색 또는 투명을 반환하는 것이 가능합니다. 임의의 색상을 지정할 수 없습니다.
