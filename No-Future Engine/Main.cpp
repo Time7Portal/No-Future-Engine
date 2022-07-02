@@ -1037,14 +1037,13 @@ private:
         // viewType 과 format 은 어떻게 이미지 데이터가 해석될지 지정합니다. 1D, 2D, 3D 텍스쳐나 큐브 맵도 될 수 있습니다.
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = format;
-        viewInfo.subresourceRange.aspectMask = aspectFlags; // @@@
         // components 설정값을 사용하면 RGBA 색상 채널을 GGBA 처럼 막 섞을 수 있습니다. 예를 들어 모노크롬 텍스처의 경우 모든 채널을 빨간색 채널에 매핑할 수 있습니다. - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkComponentSwizzle.html
         viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
         viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
         viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
         viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
         // subresourceRange는 이미지의 목적이 무엇이며 액세스해야 하는 이미지 부분을 설명합니다. 우리의 이미지는 밉매핑 레벨이나 다중 레이어 없이 색상 대상으로 사용됩니다.
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 칼라 타겟으로 사용
+        viewInfo.subresourceRange.aspectMask = aspectFlags; // 뷰에 포함되는 이미지의 양식을 정의 - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageAspectFlagBits.html
         viewInfo.subresourceRange.baseMipLevel = 0; // 밉맵 없음
         viewInfo.subresourceRange.levelCount = 1; // 밉맵 계층 갯수
         // 스테레오그래픽 3D 응용 프로그램에서는 여러 레이어가 있는 스왑 체인을 만들 것입니다. 그런 다음 다른 레이어에 액세스하여 왼쪽 및 오른쪽 눈의 보기를 나타내는 각 이미지에 대해 여러 이미지 뷰를 만들 수 있습니다.
