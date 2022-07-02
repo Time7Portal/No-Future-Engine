@@ -113,7 +113,7 @@ struct SwapChainSupportDetails
 // 버텍스 셰이더에 넣을 버텍스 정보를 담고 있는 구조체
 struct Vertex
 {
-    glm::vec2 position;     // 버텍스 위치
+    glm::vec3 position;     // 버텍스 위치
     glm::vec3 color;        // 버텍스 색상
     glm::vec2 texCoord;     // 텍스쳐 UV 좌표값
 
@@ -155,7 +155,7 @@ struct Vertex
         // ivec2: VK_FORMAT_R32G32_SINT, 32비트 부호 있는 정수의 2성분 벡터
         // uvec4 : VK_FORMAT_R32G32B32A32_UINT, 32비트 부호 없는 정수의 4성분 벡터
         // double : VK_FORMAT_R64_SFLOAT, 배정밀도(64비트) 부동 소수점
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributeDescriptions[0].offset = offsetof(Vertex, position);
 
         // format 매개변수는 속성 데이터의 바이트 크기를 암시적으로 정의하고 offset 매개변수는 읽을 버텍스별 데이터의 시작 이후 건너뛸 바이트 수를 지정합니다. binding은 한 번에 하나의 버텍스을 로드하고 컬러 데이터 속성(color)은 이 전체 버텍스 데이터의 시작 부분에서 8바이트 오른쪽(offset)에 있습니다. 이것은 offsetof 매크로를 사용하여 자동으로 계산됩니다.
@@ -201,16 +201,22 @@ struct UniformBufferObject
 // interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상}, {텍스쳐 UV 위치} }
 const std::vector<Vertex> vertices = {
     // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다. 텍스처 좌표에 대한 vec2를 포함하도록 Vertex 구조체를 수정합니다. 정점 셰이더에서 입력으로 텍스처 좌표에 액세스할 수 있도록 VkVertexInputAttributeDescription도 추가해야 합니다. 정사각형 표면을 가로지르는 보간을 위해 프래그먼트 셰이더에 전달할 수 있어야 합니다. 이 튜토리얼에서는 왼쪽 상단 모서리의 0, 0에서 오른쪽 하단 모서리의 1, 1까지의 좌표를 사용하여 사각형을 텍스처로 채울 것입니다. 다양한 좌표로 자유롭게 실험해 보세요. 0보다 작거나 1보다 큰 좌표를 사용하여 주소 지정 모드가 작동하는지 확인하십시오!
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 // 직사각형을 그리기 위해 사용될 버텍스 순서입니다.
 const std::vector<uint16_t> indices = {
     // 실제 응용 프로그램에서 렌더링할 3D 메시는 종종 여러 삼각형 내 버텍스들을 공유할 수 있습니다. 공유할 버텍스들의 순서를 ID 로 활용하여 (인덱싱) 아래처럼 사각형을 그리는 것과 같은 간단한 작업에서도 사용할 수 있습니다. 사각형을 그리기 위해선 2개의 삼각형을 겹쳐 그려야 하는데 이때 2개의 버텍스는 중복되어 사용될 것이므로 이를 ID 로 공유해 사용하면 효율적입니다. 인덱스 버퍼는 본질적으로 버텍스 버퍼에 대한 포인터의 배열입니다. 버텍스 데이터를 재정렬하고 여러 버텍스에 대해 기존 데이터를 재사용할 수 있습니다. https://vulkan-tutorial.com/Vertex_buffers/Index_buffer 링크의 그림은 4개의 고유한 버텍스 각각을 포함하는 버텍스 버퍼가 있는 경우 사각형에 대한 인덱스 버퍼의 모양을 보여줍니다. 처음 세 개의 인덱스는 오른쪽 위 삼각형을 정의하고 마지막 세 개의 인덱스는 왼쪽 아래 삼각형의 버텍스를 정의합니다. 버텍스의 항목 수에 따라 인덱스 버퍼에 uint16_t 또는 uint32_t를 사용할 수 있습니다. 65535개 미만의 고유 버텍스을 사용하고 있기 때문에 지금은 uint16_t를 고수할 수 있습니다.
-    0, 1, 2, 2, 3, 0
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4
 };
 
 
@@ -243,10 +249,14 @@ private:
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
 
+    VkImage depthImage;                                 // @@@
+    VkDeviceMemory depthImageMemory;                    // @@@
+    VkImageView depthImageView;                         // @@@
+
     VkImage textureImage;                               // 텍스쳐 이미지 핸들
-    VkDeviceMemory textureImageMemory;                  // @@@
-    VkImageView textureImageView;                       // @@@@@@
-    VkSampler textureSampler;                           // @@@@@@
+    VkDeviceMemory textureImageMemory;                  // 텍스쳐 이미지 메모리 핸들
+    VkImageView textureImageView;                       // 텍스쳐 이미지 뷰 핸들
+    VkSampler textureSampler;                           // 텍스쳐 샘플러 핸들
     
     VkBuffer vertexBuffer;                              // 버텍스 버퍼
     VkDeviceMemory vertexBufferMemory;                  // 버텍스 버퍼가 들어있는 실제 메모리의 핸들
@@ -348,9 +358,11 @@ private:
 
         createGraphicsPipeline();       // 2-9. 셰이더 로드 및 그래픽스 파이프라인 생성
 
-        createFramebuffers();           // 2-10. 프레임 버퍼들을 생성
-
         createCommandPool();            // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
+
+        createDepthResources();         // @@@
+
+        createFramebuffers();           // 2-10. 프레임 버퍼들을 생성
 
         createTextureImage();           // 2-12. 이미지(텍스쳐) 파일 로드
 
@@ -1008,15 +1020,15 @@ private:
         // 스왑 체인용 이미지 뷰(사용 방식)을 정의하기 위해 모든 스왑 체인 이미지를 순회합니다.
         swapChainImageViews.resize(swapChainImages.size());
 
-        for (size_t i = 0; i < swapChainImages.size(); i++)
+        for (uint32_t i = 0; i < swapChainImages.size(); i++)
         {
             // createImageViews 의 이미지 뷰를 생성하는 코드가 여러 곳에서도 비슷하게 사용되기 때문에 createImageView 함수로 분리하여 재사용 하였습니다.
-            swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat);
+            swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
         }
     }
 
     // 이미지 뷰를 생성하는 헬퍼 함수
-    HELPER_FUNCTION VkImageView createImageView(VkImage image, VkFormat format)
+    HELPER_FUNCTION VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
     {
         // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
         VkImageViewCreateInfo viewInfo{};
@@ -1025,6 +1037,7 @@ private:
         // viewType 과 format 은 어떻게 이미지 데이터가 해석될지 지정합니다. 1D, 2D, 3D 텍스쳐나 큐브 맵도 될 수 있습니다.
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = format;
+        viewInfo.subresourceRange.aspectMask = aspectFlags; // @@@
         // components 설정값을 사용하면 RGBA 색상 채널을 GGBA 처럼 막 섞을 수 있습니다. 예를 들어 모노크롬 텍스처의 경우 모든 채널을 빨간색 채널에 매핑할 수 있습니다. - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkComponentSwizzle.html
         viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
         viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY; // optional
@@ -1090,6 +1103,18 @@ private:
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 
+        // @@@
+        VkAttachmentDescription depthAttachment{};
+        depthAttachment.format = findDepthFormat();
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+
         // 서브패스 및 어태치먼트 파일 속성 설정
         // 하나의 렌더 패스는 여러 서브(하위)패스로 구성될 수 있습니다. 서브패스는 이전 패스의 프레임 버퍼 내용에 따라 달라지는 후속 렌더링 작업입니다(예: 차례로 적용되는 후처리 효과 시퀀스). 이러한 렌더링 작업을 하나의 렌더 패스로 그룹화하면 Vulkan은 작업을 재정렬하고 더 나은 성능을 위해 메모리 대역폭을 절약할 수 있습니다. 그러나 첫 번째 삼각형의 경우 단일 서브패스를 사용합니다.
         // 모든 서브패스는 하나 이상의 어태치먼트를 참조합니다. 이러한 참조는 다음과 같은 VkAttachmentReference 구조체로 표현합니다.
@@ -1097,6 +1122,13 @@ private:
         VkAttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
+        // @@@
+        VkAttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
 
         // 서브패스는 VkSubpassDescription 구조를 사용하여 설명됩니다.
         VkSubpassDescription subpass{};
@@ -1110,6 +1142,7 @@ private:
         // pResolveAttachments : 멀티샘플링 색상 어태치먼트 파일에 사용되는 어태치먼트
         // pDepthStencilAttachment : 깊이 및 스텐실 데이터에 대한 어태치먼트
         // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 어태치먼트
+        subpass.pDepthStencilAttachment = &depthAttachmentRef; // @@@
 
 
         // 서브패스 종속성 설정
@@ -1119,18 +1152,19 @@ private:
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
         // 다음 두 필드는 대기할 작업과 이러한 작업이 발생하는 단계를 지정합니다. 이미지에 접근하기 전에 스왑 체인이 이미지 읽기를 마칠 때까지 기다려야 합니다. 이것은 색상 부착 출력 단계 자체에서 대기하여 수행할 수 있습니다.
-        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = 0;
         // 이를 기다려야 하는 작업은 색상 부착 단계에 있으며 색상 부착 쓰기가 포함됩니다. 이러한 설정은 실제로 필요하고 허용될 때까지 전환이 발생하지 않도록 방지합니다. 색상 쓰기를 시작하려는 경우.
-        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 
         // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다.
+        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment }; // @@@
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
         // VkRenderPassCreateInfo 구조체에는 종속성 배열을 지정하는 두 개의 필드가 있습니다.
@@ -1331,7 +1365,14 @@ private:
 
         // 2-9-11. 깊이 및 스텐실 테스팅을 설정합니다.
         // 깊이 및/또는 스텐실 버퍼를 사용하는 경우 VkPipelineDepthStencilStateCreateInfo를 사용하여 깊이 및 스텐실 테스트도 구성해야 합니다. 지금 당장은 없으므로 그러한 구조체에 대한 포인터 대신 nullptr을 전달할 수 있습니다. 깊이 버퍼링 장에서 다시 다루겠습니다.
-        // @@ ---아직은 코드없음---
+        // @@@ ---아직은 코드없음--- 이제 코드 추가됨.
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.stencilTestEnable = VK_FALSE;
 
 
         // 2-9-12. 컬러 블랜딩을 설정합니다.
@@ -1411,7 +1452,7 @@ private:
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = nullptr; // Optional
+        pipelineInfo.pDepthStencilState = &depthStencil; // Optional @@@
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = nullptr; // Optional
         // 파이프라인 레이아웃과 렌더패스는 특이하게 구조체 포인터가 아닌 핸들을 집어넣습니다.
@@ -1503,8 +1544,9 @@ private:
         // 모든 스왑체인 이미지 뷰들에 대한 프레임 버퍼를 만듭니다.
         for (size_t i = 0; i < swapChainImageViews.size(); i++)
         {
-            VkImageView attachments[] = {
-                swapChainImageViews[i]
+            std::array<VkImageView, 2> attachments = {
+                swapChainImageViews[i],
+                depthImageView
             };
 
             // 보시다시피 프레임 버퍼 생성은 매우 간단합니다. 먼저 어떤 렌더패스가 프레임 버퍼와 호환되는지 지정해야 합니다. 해당 렌더패스에 호환되는 프레임 버퍼만 사용할 수 있습니다.
@@ -1512,8 +1554,8 @@ private:
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebufferInfo.renderPass = renderPass;
             // AttachmentCount 및 pAttachments 매개변수에 렌더 패스 pAttachment 배열의 각 어태치먼트 디스크립션에 바인딩되어야 하는 VkImageView 개체를 지정합니다.
-            framebufferInfo.attachmentCount = 1;
-            framebufferInfo.pAttachments = attachments;
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
             // 너비 및 높이 매개변수는 스왑 체인 크기와 동일하게 하면 됩니다. 레이어는 이미지 배열의 레이어 수를 나타냅니다. 우리가 만든 스왑 체인 이미지는 단일 이미지이므로 레이어 수는 1입니다.
             framebufferInfo.width = swapChainExtent.width;
             framebufferInfo.height = swapChainExtent.height;
@@ -1549,6 +1591,51 @@ private:
         {
             throw std::runtime_error("Failed to create graphics command pool!");
         }
+    }
+
+
+
+    // @@@
+    void createDepthResources()
+    {
+        VkFormat depthFormat = findDepthFormat();
+
+        createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    }
+
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+    {
+        for (VkFormat format : candidates)
+        {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+
+            if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
+            {
+                return format;
+            }
+            else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features)
+            {
+                return format;
+            }
+        }
+
+        throw std::runtime_error("failed to find supported format!");
+    }
+
+    VkFormat findDepthFormat()
+    {
+        return findSupportedFormat(
+            { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        );
+    }
+
+    bool hasStencilComponent(VkFormat format)
+    {
+        return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
 
@@ -1772,7 +1859,7 @@ private:
     inline void createTextureImageView()
     {
         // 이 장에서는 그래픽 파이프라인이 이미지를 샘플링하는 데 필요한 리소스를 두 개 더 만들 것입니다. 첫 번째 리소스는 이전에 스왑 체인 이미지에서 이미 본 것이지만 두 번째 리소스는 새로운 것입니다. 이는 셰이더가 이미지에서 텍셀을 읽는 방법과 관련이 있습니다. 이전에 스왑 체인 이미지와 프레임 버퍼를 사용하여 이미지에 직접 액세스하지 않고 이미지 뷰를 통해 액세스하는 것을 보았습니다. 또한 텍스처 이미지에 대해 이러한 이미지 뷰를 생성해야 합니다. 텍스처 이미지에 대한 VkImageView를 보유할 클래스 멤버 textureImageView를 추가하고 이를 생성할 새 함수 createTextureImageView를 만듭니다.
-        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB);
+        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
 
@@ -2364,6 +2451,7 @@ private:
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
+        createDepthResources(); // @@@
         createFramebuffers();
     }
 
@@ -2426,10 +2514,14 @@ private:
         // 다음 두 매개변수는 렌더 영역의 크기를 정의합니다. 렌더 영역은 셰이더 로드 및 저장이 수행되는 위치를 정의합니다. 이 영역 밖의 픽셀에는 정의되지 않은 값이 있습니다. 최상의 성능을 위해 첨부 파일의 크기와 일치해야 합니다.
         renderPassInfo.renderArea.offset = { 0, 0 };
         renderPassInfo.renderArea.extent = swapChainExtent;
-        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 첨부에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다.
-        VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 첨부에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다. @@@
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
 
         // 이제 렌더 패스를 시작할 수 있습니다. 명령을 기록하는 모든 기능은 vkCmd 접두사로 시작합니다. 모두 void를 반환하므로 기록을 마칠 때까지 오류 처리가 없습니다.
         // 모든 명령의 첫 번째 매개변수는 항상 명령을 기록할 커맨드 버퍼입니다. 두 번째 매개변수는 방금 제공한 렌더 패스의 세부 정보를 지정합니다. 최종 매개변수는 렌더 패스 내에서 그리기 명령이 제공되는 방식을 제어합니다. 다음 두 값 중 하나를 가질 수 있습니다.
@@ -2562,6 +2654,11 @@ private:
     // 스왑 체인을 다시 만들기 전에 이전 버전을 정리합니다. 또는 프로그램 종료를 위해 스왑 체인에 쓰인 모든 개체들을 지웁니다.
     HELPER_FUNCTION void cleanupSwapChain()
     {
+        // @@@
+        vkDestroyImageView(device, depthImageView, nullptr);
+        vkDestroyImage(device, depthImage, nullptr);
+        vkFreeMemory(device, depthImageMemory, nullptr);
+
         // 이미지 뷰들과 랜더패스를 지우기 전에 먼저 이들을 사용하고 있는 프레임 버퍼를 삭제해야 합니다.
         for (auto framebuffer : swapChainFramebuffers)
         {
