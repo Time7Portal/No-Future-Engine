@@ -253,9 +253,9 @@ private:
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
 
-    VkImage depthImage;                                 // 깊이 어태치먼트은 색상 어태치먼트과 마찬가지로 이미지를 기반으로 합니다. 차이점은 스왑 체인이 자동으로 깊이 이미지를 생성하지 않는다는 것입니다. 한 번에 하나의 그리기 작업만 실행되기 때문에 하나의 깊이 이미지만 필요합니다. 깊이 이미지에는 이미지, 메모리 및 이미지 보기의 세 가지 리소스가 다시 필요합니다.
-    VkDeviceMemory depthImageMemory;                    // @@@
-    VkImageView depthImageView;                         // @@@
+    VkImage depthImage;                                 // 깊이 이미지 핸들. 깊이 어태치먼트는 색상 어태치먼트와 마찬가지로 이미지를 기반으로 합니다. 차이점은 스왑 체인이 자동으로 깊이 이미지를 생성하지 않는다는 것입니다. 한 번에 하나의 그리기 작업만 실행되기 때문에 하나의 깊이 이미지만 필요합니다. 깊이 이미지에는 이미지, 메모리 및 이미지 보기의 세 가지 리소스가 필요합니다.
+    VkDeviceMemory depthImageMemory;                    // 깊이 이미지 메모리 핸들
+    VkImageView depthImageView;                         // 깊이 이미지 뷰 핸들
 
     VkImage textureImage;                               // 텍스쳐 이미지 핸들
     VkDeviceMemory textureImageMemory;                  // 텍스쳐 이미지 메모리 핸들
@@ -364,7 +364,7 @@ private:
 
         createCommandPool();            // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createDepthResources();         // 2-11. @@@
+        createDepthResources();         // 2-11. 깊이 이미지 생성
 
         createFramebuffers();           // 2-12. 프레임 버퍼들을 생성
 
@@ -1599,16 +1599,24 @@ private:
 
 
     // @@@
-    void createDepthResources()
+    inline void createDepthResources()
     {
+        // 깊이 이미지를 만드는 것은 매우 간단합니다. 스왑 체인 범위, 깊이 어태치먼트에 적합한 이미지 사용, 최적의 타일링 및 장치 로컬 메모리로 정의된 색상 첨부와 동일한 해상도를 가져야 합니다. 여기서 유일하게 궁금해야 할 점은 깊이 이미지에 적합한 형식(Format)이 무엇인지이며, 형식은 VK_FORMAT_D32_ 꼴로 나타내어지는 깊이 구성 요소를 포함해야 합니다. 텍스처 이미지와 달리 프로그램에서 텍셀에 직접 액세스하지 않기 때문에 특정 형식이 반드시 필요한 것은 아닙니다. 적절한 정확도만 있으면 되며 실제 응용 프로그램에서는 최소 24비트가 일반적입니다. 이 요구 사항에 맞는 여러 형식이 있습니다.
+        // 1. VK_FORMAT_D32_SFLOAT: 깊이에 대한 32비트 부동 소수점
+        // 2. VK_FORMAT_D32_SFLOAT_S8_UINT : 깊이 및 8비트 스텐실 구성 요소에 대한 32비트 부호 있는 부동 소수점
+        // 3. VK_FORMAT_D24_UNORM_S8_UINT : 깊이 및 8비트 스텐실 구성 요소에 대한 24비트 부동 소수점
+        // 스텐실 구성 요소는 스텐실 테스트 https://en.wikipedia.org/wiki/Stencil_buffer 에 사용되며, 이는 깊이 테스트와 결합할 수 있는 추가 테스트입니다. 이에 대해서는 다음 장에서 살펴보겠습니다.
+
         VkFormat depthFormat = findDepthFormat();
 
         createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
     }
 
-    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+    // 깊이 이미지를 만들때 어떤 형식으로 만드는 것이 현재 디바이스에서 가장 좋을지 최고의 후보를 골라주는 헬퍼함수
+    HELPER_FUNCTION VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
     {
+        // VK_FORMAT_D32_SFLOAT 형식에 대한 지원이 가장 일반적이고 흔하게 사용되지만 (하드웨어 데이터베이스 참조), 하드웨어에서 지원하지 않을 가능성을 고려하여 가능하면 애플리케이션에 유연성을 추가하는 것이 좋습니다. 때문에 가장 바람직한 것부터 가장 바람직하지 않은 것 순으로 후보를 취하고 어떤 것이 가장 적합한 형식인지 확인하는 함수 findSupportedFormat을 작성하였습니다.
         for (VkFormat format : candidates)
         {
             VkFormatProperties props;
@@ -1624,10 +1632,11 @@ private:
             }
         }
 
-        throw std::runtime_error("failed to find supported format!");
+        throw std::runtime_error("Failed to find supported format!");
     }
 
-    VkFormat findDepthFormat()
+    // 
+    HELPER_FUNCTION VkFormat findDepthFormat()
     {
         return findSupportedFormat(
             { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
@@ -1636,7 +1645,8 @@ private:
         );
     }
 
-    bool hasStencilComponent(VkFormat format)
+    // 
+    HELPER_FUNCTION bool hasStencilComponent(VkFormat format)
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
