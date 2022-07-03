@@ -2,7 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE // OpenGL과 다르게 0 ~ 1 스케일 깊이 값을 사용합니다.
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE // GLM 에 의해 생성된 원근 투영 행렬은 기본적으로 -1.0 ~ +1.0 의 OpenGL 기본 깊이 범위를 사용합니다. GLM_FORCE_DEPTH_ZERO_TO_ONE 정의를 사용하여 0.0 ~ 1.0 의 Vulkan 범위를 사용하도록 해야 합니다.
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp> // MVP 변환 행렬을 만들기 위해 사용합니다. glm/gtc/matrix_transform.hpp 헤더는 glm::rotate와 같은 모델 변환, glm::lookAt와 같은 보기 변환 및 glm::perspective와 같은 투영 변환을 생성하는 데 사용할 수 있는 함수를 노출합니다. GLM_FORCE_RADIANS 정의는 가능한 혼동을 피하기 위해 glm::rotate와 같은 함수가 라디안을 인수로 사용하도록 하는 데 필요합니다.
 
@@ -155,19 +155,19 @@ struct Vertex
         // ivec2: VK_FORMAT_R32G32_SINT, 32비트 부호 있는 정수의 2성분 벡터
         // uvec4 : VK_FORMAT_R32G32B32A32_UINT, 32비트 부호 없는 정수의 4성분 벡터
         // double : VK_FORMAT_R64_SFLOAT, 배정밀도(64비트) 부동 소수점
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT; // X, Y, Z 위치값 (32비트 3개)
         attributeDescriptions[0].offset = offsetof(Vertex, position);
 
         // format 매개변수는 속성 데이터의 바이트 크기를 암시적으로 정의하고 offset 매개변수는 읽을 버텍스별 데이터의 시작 이후 건너뛸 바이트 수를 지정합니다. binding은 한 번에 하나의 버텍스을 로드하고 컬러 데이터 속성(color)은 이 전체 버텍스 데이터의 시작 부분에서 8바이트 오른쪽(offset)에 있습니다. 이것은 offsetof 매크로를 사용하여 자동으로 계산됩니다.
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT; // R, G, B 색상값
         attributeDescriptions[1].offset = offsetof(Vertex, color);
 
         // 텍스쳐를 입히기 위해 UV 좌표를 추가하였습니다.
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT; // U, V 좌표값
         attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 
         return attributeDescriptions;
@@ -180,7 +180,7 @@ struct Vertex
 // 1. 파이프라인 생성 중 디스크립터 레이아웃 지정
 // 2. 디스크립터 풀에서 디스크립터 세트 할당
 // 3. 렌더링 중 디스크립터 세트 바인딩
-// 디스크립터 레이아웃은 렌더 패스가 액세스할 첨부 유형을 지정하는 것처럼 파이프라인에서 액세스할 리소스 유형을 지정합니다. 프레임 버퍼가 렌더 패스 첨부 파일에 바인딩할 실제 이미지 뷰를 지정하는 것처럼 디스크립터 세트는 디스크립터에 바인딩될 실제 버퍼 또는 이미지 리소스를 지정합니다. 그런 다음 디스크립터 세트는 버텍스 버퍼 및 프레임 버퍼와 마찬가지로 그리기 명령에 바인딩됩니다. 디스크립터에는 많은 유형이 있지만 이 장에서는 UBO(Uniform Buffer Objects)로 작업합니다. 다음 장에서 다른 유형의 디스크립터를 살펴보겠지만 기본 프로세스는 동일합니다. 정점 셰이더가 다음과 같이 C 구조체에 갖고자 하는 데이터가 있다고 가정해 보겠습니다. 그런 다음 데이터를 VkBuffer인 uniformBuffers에 복사하고 버텍스 셰이더에서 유티폰 버퍼 오브젝트 디스크립터를 통해 데이터에 액세스할 수 있습니다. GLM 데이터 유형을 사용하여 셰이더의 변수 유형과 정확히 일치시킬 수 있습니다. 행렬 데이터는 셰이더가 사용하는 방식과 이진 데이터 그대로 호환 가능하므로 나중에 UniformBufferObject를 VkBuffer에 memcpy할 수 있습니다.
+// 디스크립터 레이아웃은 렌더 패스가 액세스할 어태치먼트 유형을 지정하는 것처럼 파이프라인에서 액세스할 리소스 유형을 지정합니다. 프레임 버퍼가 렌더 패스 어태치먼트에 바인딩할 실제 이미지 뷰를 지정하는 것처럼 디스크립터 세트는 디스크립터에 바인딩될 실제 버퍼 또는 이미지 리소스를 지정합니다. 그런 다음 디스크립터 세트는 버텍스 버퍼 및 프레임 버퍼와 마찬가지로 그리기 명령에 바인딩됩니다. 디스크립터에는 많은 유형이 있지만 이 장에서는 UBO(Uniform Buffer Objects)로 작업합니다. 다음 장에서 다른 유형의 디스크립터를 살펴보겠지만 기본 프로세스는 동일합니다. 정점 셰이더가 다음과 같이 C 구조체에 갖고자 하는 데이터가 있다고 가정해 보겠습니다. 그런 다음 데이터를 VkBuffer인 uniformBuffers에 복사하고 버텍스 셰이더에서 유티폰 버퍼 오브젝트 디스크립터를 통해 데이터에 액세스할 수 있습니다. GLM 데이터 유형을 사용하여 셰이더의 변수 유형과 정확히 일치시킬 수 있습니다. 행렬 데이터는 셰이더가 사용하는 방식과 이진 데이터 그대로 호환 가능하므로 나중에 UniformBufferObject를 VkBuffer에 memcpy할 수 있습니다.
 // Vulkan은 구조의 데이터가 특정 방식으로 메모리에 정렬될 것으로 예상합니다. 예를 들면 다음과 같습니다.
 // 1. 스칼라는 N (32비트 부동 소수점이 주어진 경우 = 4바이트) 으로 정렬되어야 합니다.
 // 2. vec2는 2N (= 8바이트) 으로 정렬되어야 합니다.
@@ -200,7 +200,7 @@ struct UniformBufferObject
 // GLM 은 사용하기 편하도록 셰이더 언어에서 사용되는 벡터 타입과 정확히 일치하는 C++ 타입을 제공합니다.
 // interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상}, {텍스쳐 UV 위치} }
 const std::vector<Vertex> vertices = {
-    // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다. 텍스처 좌표에 대한 vec2를 포함하도록 Vertex 구조체를 수정합니다. 정점 셰이더에서 입력으로 텍스처 좌표에 액세스할 수 있도록 VkVertexInputAttributeDescription도 추가해야 합니다. 정사각형 표면을 가로지르는 보간을 위해 프래그먼트 셰이더에 전달할 수 있어야 합니다. 이 튜토리얼에서는 왼쪽 상단 모서리의 0, 0에서 오른쪽 하단 모서리의 1, 1까지의 좌표를 사용하여 사각형을 텍스처로 채울 것입니다. 다양한 좌표로 자유롭게 실험해 보세요. 0보다 작거나 1보다 큰 좌표를 사용하여 주소 지정 모드가 작동하는지 확인하십시오!
+    // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다. 텍스처 좌표에 대한 vec2를 포함하도록 Vertex 구조체를 수정합니다. 정점 셰이더에서 입력으로 텍스처 좌표에 액세스할 수 있도록 VkVertexInputAttributeDescription도 추가해야 합니다. 정사각형 표면을 가로지르는 보간을 위해 프래그먼트 셰이더에 전달할 수 있어야 합니다. 이 튜토리얼에서는 왼쪽 상단 모서리의 0, 0에서 오른쪽 하단 모서리의 1, 1까지의 좌표를 사용하여 사각형을 텍스처로 채울 것입니다. 0보다 작거나 1보다 큰 좌표로도 자유롭게 실험해 볼 수 있습니다. (UV 값이 0 미만 또는 1 초과를 하더라도 VK_SAMPLER_ADDRESS_MODE_REPEAT 로 패턴이 반복되게 설정되어 있는 상태입니다) 지금까지 작업한 지오메트리는 3D로 투영되지만 완전히 평평합니다. 이 장에서는 진정한 3D 메쉬를 보여주기 위해 position에 Z 좌표를 추가합니다. 이 세 번째 좌표를 사용하여 현재 사각형 아래에 Z 위치가 -0.5f 값을 가지는 사각형을 배치하여 기하 도형이 깊이별로 정렬되지 않을 때 발생하는 문제를 확인합니다.
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
     {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
@@ -217,6 +217,10 @@ const std::vector<uint16_t> indices = {
     // 실제 응용 프로그램에서 렌더링할 3D 메시는 종종 여러 삼각형 내 버텍스들을 공유할 수 있습니다. 공유할 버텍스들의 순서를 ID 로 활용하여 (인덱싱) 아래처럼 사각형을 그리는 것과 같은 간단한 작업에서도 사용할 수 있습니다. 사각형을 그리기 위해선 2개의 삼각형을 겹쳐 그려야 하는데 이때 2개의 버텍스는 중복되어 사용될 것이므로 이를 ID 로 공유해 사용하면 효율적입니다. 인덱스 버퍼는 본질적으로 버텍스 버퍼에 대한 포인터의 배열입니다. 버텍스 데이터를 재정렬하고 여러 버텍스에 대해 기존 데이터를 재사용할 수 있습니다. https://vulkan-tutorial.com/Vertex_buffers/Index_buffer 링크의 그림은 4개의 고유한 버텍스 각각을 포함하는 버텍스 버퍼가 있는 경우 사각형에 대한 인덱스 버퍼의 모양을 보여줍니다. 처음 세 개의 인덱스는 오른쪽 위 삼각형을 정의하고 마지막 세 개의 인덱스는 왼쪽 아래 삼각형의 버텍스를 정의합니다. 버텍스의 항목 수에 따라 인덱스 버퍼에 uint16_t 또는 uint32_t를 사용할 수 있습니다. 65535개 미만의 고유 버텍스을 사용하고 있기 때문에 지금은 uint16_t를 고수할 수 있습니다.
     0, 1, 2, 2, 3, 0,
     4, 5, 6, 6, 7, 4
+    // 문제는 아래쪽 사각형의 조각이 위쪽 사각형의 조각 위에 그려지는 것입니다. 단순히 인덱스 배열의 나중에 오기 때문입니다. 이 문제를 해결하는 두 가지 방법이 있습니다.
+    // 1. 모든 드로우 콜을 뒤에서 앞으로 깊이별로 정렬
+    // 2. 깊이 버퍼로 깊이 테스트 사용
+    // 첫 번째 접근 방식은 일반적으로 투명 개체를 그리는 데 사용됩니다. 순서에 독립적인 투명도는 해결하기 어려운 문제이기 때문입니다. 그러나 깊이별로 조각을 정렬하는 문제는 일반적으로 깊이 버퍼를 사용하여 해결합니다. 색상 어태치먼트가 모든 위치의 색상을 저장하는 것처럼 깊이 버퍼는 모든 위치에 대한 깊이를 저장하는 추가적인 어태치먼트입니다. 래스터라이저가 조각을 생성할 때마다 깊이 테스트는 새 조각이 이전 조각보다 가까운지 확인합니다. 그렇지 않은 경우 새 조각은 그리지 않고 무시됩니다. 깊이 테스트를 통과한 프래그먼트는 자체 깊이를 깊이 버퍼에 씁니다. 색상 출력을 조작할 수 있는 것처럼 프래그먼트 셰이더에서 이 값을 조작할 수 있습니다.
 };
 
 
@@ -249,7 +253,7 @@ private:
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
 
-    VkImage depthImage;                                 // @@@
+    VkImage depthImage;                                 // 깊이 어태치먼트은 색상 어태치먼트과 마찬가지로 이미지를 기반으로 합니다. 차이점은 스왑 체인이 자동으로 깊이 이미지를 생성하지 않는다는 것입니다. 한 번에 하나의 그리기 작업만 실행되기 때문에 하나의 깊이 이미지만 필요합니다. 깊이 이미지에는 이미지, 메모리 및 이미지 보기의 세 가지 리소스가 다시 필요합니다.
     VkDeviceMemory depthImageMemory;                    // @@@
     VkImageView depthImageView;                         // @@@
 
@@ -258,7 +262,7 @@ private:
     VkImageView textureImageView;                       // 텍스쳐 이미지 뷰 핸들
     VkSampler textureSampler;                           // 텍스쳐 샘플러 핸들
     
-    VkBuffer vertexBuffer;                              // 버텍스 버퍼
+    VkBuffer vertexBuffer;                              // 버텍스 버퍼 핸들
     VkDeviceMemory vertexBufferMemory;                  // 버텍스 버퍼가 들어있는 실제 메모리의 핸들
     // 버텍스 데이터와 마찬가지로 GPU가 인덱스에 액세스할 수 있도록 인덱스를 VkBuffer에 업로드해야 합니다.인덱스 버퍼에 대한 리소스를 보유할 두 개의 새 클래스 멤버를 정의합니다.
     VkBuffer indexBuffer;                               // 인덱스 버퍼
@@ -266,12 +270,12 @@ private:
 
     // 셰이더를 위해 UBO 데이터가 포함된 버퍼를 자세히 정의할 것입니다. 매 프레임마다 새로운 데이터를 유니폼 버퍼에 복사할 것이므로 스테이징 버퍼를 갖는 것은 의미가 없습니다. 이 경우 불필요한 오버헤드를 추가하고 성능을 개선하는 대신 오히려 성능을 저하시킬 수 있습니다. 여러 프레임이 동시에 비행 중일 수 있고 이전 프레임이 여전히 읽고 있는 동안 다음 프레임을 준비하기 위해 버퍼를 업데이트하고 싶지 않기 때문에 여러 버퍼가 있어야 합니다! 따라서 비행 중인 프레임 수만큼 유니폼 버퍼가 필요하고 현재 GPU 에서 읽고 있지 않는 유니폼 버퍼에 기록해야 합니다.
     std::vector<VkBuffer> uniformBuffers;               // 유니폼 버퍼 
-    std::vector<VkDeviceMemory> uniformBuffersMemory;   // 그래픽카드 메모리에 담긴 유니폼 버퍼
+    std::vector<VkDeviceMemory> uniformBuffersMemory;   // 실제 그래픽카드 메모리에 담긴 유니폼 버퍼 핸들
 
-    VkDescriptorPool descriptorPool;                    // 
-    std::vector<VkDescriptorSet> descriptorSets;        // 
+    VkDescriptorPool descriptorPool;                    // 디스크립터 풀 핸들. 디스크립터 세트들을 할당하고 관리합니다. 주의할 점은 Descriptor pools은 외부적으로 동기화 되어지므로 멀티 쓰레드에서 동시에 같은 pool에 접근하여 할당/해제를 시도하면 안됩니다.
+    std::vector<VkDescriptorSet> descriptorSets;        // 디스크립터 셋 핸들 모음. 셰이더가 지정된 위치의 리소스를 읽을 수 있게 하는 인터페이스를 제공합니다.
 
-    std::vector<VkCommandBuffer> commandBuffers;        // 커맨드 버퍼. 커맨드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 커맨드 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
+    std::vector<VkCommandBuffer> commandBuffers;        // 커맨드 버퍼 모음. 커맨드 버퍼에는 그래픽카드에 보낼 명령들이 담깁니다. 커맨드 버퍼는 명령 풀이 파괴될 때 자동으로 소멸되므로 명시적인 정리가 필요하지 않습니다.
 
     // 동시에 대기 없이 미리 CPU 에서 처리해야 하는 프레임 수만큼 각 프레임에는 자체 커맨드 버퍼, 세마포어 및 펜스 세트가 있어야 합니다. 이름을 바꾼 다음 객체의 std::vectors로 변경합니다.
     std::vector<VkSemaphore> imageAvailableSemaphores;              // 이미지가 스왑체인에서 획득되었고 렌더링할 준비가 되었음을 알리는 세마포어
@@ -974,7 +978,7 @@ private:
             // 트리플 버퍼링 수직 동기화 모드가 가능하면 활성화
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
             {
-                // @@@@ VK_PRESENT_MODE_FIFO_KHR 로 동작하도록 주석처리함
+                // @@@@ 문제가 생기면 VK_PRESENT_MODE_FIFO_KHR 로 동작하도록 이곳을 주석처리 할 수 있습니다.
                 return availablePresentMode;
             }
         }
@@ -1150,10 +1154,10 @@ private:
         // 처음 두 필드는 종속성과 종속 서브패스의 인덱스를 지정합니다. 특수 값 VK_SUBPASS_EXTERNAL은 srcSubpass 또는 dstSubpass에 지정되었는지 여부에 따라 렌더 패스 전후의 암시적 서브패스를 나타냅니다. 인덱스 0은 첫 번째이자 유일한 서브패스를 나타냅니다. 종속성 그래프에서 순환을 방지하려면 dstSubpass가 항상 srcSubpass보다 높아야 합니다(하위 경로 중 하나가 VK_SUBPASS_EXTERNAL인 경우 제외).
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
         dependency.dstSubpass = 0;
-        // 다음 두 필드는 대기할 작업과 이러한 작업이 발생하는 단계를 지정합니다. 이미지에 접근하기 전에 스왑 체인이 이미지 읽기를 마칠 때까지 기다려야 합니다. 이것은 색상 부착 출력 단계 자체에서 대기하여 수행할 수 있습니다.
+        // 다음 두 필드는 대기할 작업과 이러한 작업이 발생하는 단계를 지정합니다. 이미지에 접근하기 전에 스왑 체인이 이미지 읽기를 마칠 때까지 기다려야 합니다. 이것은 색상 어태치먼트 출력 단계 자체에서 대기하여 수행할 수 있습니다.
         dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = 0;
-        // 이를 기다려야 하는 작업은 색상 부착 단계에 있으며 색상 부착 쓰기가 포함됩니다. 이러한 설정은 실제로 필요하고 허용될 때까지 전환이 발생하지 않도록 방지합니다. 색상 쓰기를 시작하려는 경우.
+        // 이를 기다려야 하는 작업은 색상 어태치먼트 단계에 있으며 색상 어태치먼트 쓰기가 포함됩니다. 이러한 설정은 실제로 필요하고 허용될 때까지 전환이 발생하지 않도록 방지합니다. 색상 쓰기를 시작하려는 경우.
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
@@ -1652,7 +1656,7 @@ private:
 
         // 우리는 이미 스왑 체인 확장에 의해 자동으로 생성된 이미지 오브젝트를 만든 경험이 있습니다. 이번에는 우리가 직접 만들어야 합니다. 이미지를 생성하고 데이터로 채우는 것은 버텍스 버퍼 생성과 유사합니다. 먼저 스테이징 리소스를 만들고 픽셀 데이터로 채운 다음 렌더링에 사용할 최종 이미지 객체에 복사합니다. 이 목적을 위해 스테이징 이미지를 생성하는 것도 가능하지만 VkBuffer에서 이미지로 픽셀 값들을 직접 복사할 수도 있으며 이 API는 일부 하드웨어에서 실제로 더 빠릅니다. 먼저 이 버퍼를 만들고 픽셀 값으로 채운 다음 픽셀을 복사할 이미지를 만듭니다. 이미지 생성은 버퍼 생성과 크게 다르지 않습니다. 이전에 본 것처럼 메모리 요구 사항을 쿼리하고 장치 메모리를 할당하고 바인딩하는 작업이 포함됩니다. 그러나 이미지로 작업할 때 처리해야 할 추가 사항이 있습니다. 이미지는 픽셀이 메모리에서 구성되는 방식에 영향을 주는 다양한 레이아웃을 가질 수 있습니다. 그러나 그래픽 하드웨어가 작동하는 방식 때문에 단순히 픽셀을 행 단위로 저장하는 것만으로는 최상의 성능을 얻을 수 없습니다. 이미지에 대한 작업을 수행할 때 해당 작업에 사용하기에 최적의 레이아웃이 있는지 확인해야 합니다. 렌더 패스를 구성했을 때 실제로 이러한 레이아웃 중 일부를 이미 보았습니다.
         // 1. VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: 프레젠테이션에 최적
-        // 2. VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : 프래그먼트 셰이더에서 색상을 쓰기 위한 첨부 파일로 최적
+        // 2. VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : 프래그먼트 셰이더에서 색상을 쓰기 위한 어태치먼트로 최적
         // 3. VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : vkCmdCopyImageToBuffer와 같은 전송 작업의 소스로 최적
         // 4. VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : vkCmdCopyBufferToImage와 같은 전송 작업의 대상으로 최적
         // 5. VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : 셰이더 샘플링에 최적
@@ -1728,7 +1732,7 @@ private:
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         // usage 필드는 버퍼 생성의 그것과 동일한 의미를 가집니다. 이미지는 버퍼 복사의 대상으로 사용되므로 전송 대상으로 설정해야 합니다. 또한 셰이더에서 이미지에 액세스하여 메시에 색상을 지정할 수 있기를 원하므로 사용에는 VK_IMAGE_USAGE_SAMPLED_BIT가 포함되어야 합니다.
         imageInfo.usage = usage;
-        // 샘플 플래그는 멀티샘플링과 관련이 있습니다. 이것은 첨부로 사용할 이미지에만 관련이 있으므로 하나의 샘플을 사용하십시오. 희소 이미지와 관련된 이미지에 대한 몇 가지 선택적 플래그가 있습니다. 희소 이미지는 실제 메모리의 특정 영역만 지원하기 위한 이미지입니다. 예를 들어, 복셀 지형에 3D 텍스처를 사용하는 경우 대량의 "공기" 값을 저장하기 위해 메모리를 할당하여 낭비하는 것을 방지할 수 있습니다. 이 튜토리얼에서는 사용하지 않을 것이므로 기본값인 0으로 두십시오.
+        // 샘플 플래그는 멀티샘플링과 관련이 있습니다. 이것은 어태치먼트로 사용할 이미지에만 관련이 있으므로 하나의 샘플을 사용하십시오. 희소 이미지와 관련된 이미지에 대한 몇 가지 선택적 플래그가 있습니다. 희소 이미지는 실제 메모리의 특정 영역만 지원하기 위한 이미지입니다. 예를 들어, 복셀 지형에 3D 텍스처를 사용하는 경우 대량의 "공기" 값을 저장하기 위해 메모리를 할당하여 낭비하는 것을 방지할 수 있습니다. 이 튜토리얼에서는 사용하지 않을 것이므로 기본값인 0으로 두십시오.
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.flags = 0; // Optional
         // 이미지는 하나의 큐 페밀리, 즉 그래픽(및 그에 따른) 전송 작업을 지원하는 페밀리 하나만 사용할 예정입니다.
@@ -2367,7 +2371,7 @@ private:
         // 커맨드 버퍼를 그래픽카드에 제출하기
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        // 처음 세 개의 매개변수는 실행이 시작되기 전에 대기할 세마포어와 파이프라인의 어느 단계에서 대기할 것인지 지정합니다. 사용할 수 있을 때까지 이미지에 색상을 기록하기를 원하므로 색상 첨부 파일에 기록하는 그래픽 파이프라인의 단계를 지정하고 있습니다. 즉, 이론적으로 구현은 이미 이미지를 사용할 수 없는 동안 버텍스 셰이더 등의 실행을 시작할 수 있습니다. waitStages 배열의 각 항목은 pWaitSemaphores 에 동일한 인덱스로 있는 세마포어에 해당합니다.
+        // 처음 세 개의 매개변수는 실행이 시작되기 전에 대기할 세마포어와 파이프라인의 어느 단계에서 대기할 것인지 지정합니다. 사용할 수 있을 때까지 이미지에 색상을 기록하기를 원하므로 색상 어태치먼트에 기록하는 그래픽 파이프라인의 단계를 지정하고 있습니다. 즉, 이론적으로 구현은 이미 이미지를 사용할 수 없는 동안 버텍스 셰이더 등의 실행을 시작할 수 있습니다. waitStages 배열의 각 항목은 pWaitSemaphores 에 동일한 인덱스로 있는 세마포어에 해당합니다.
         VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         submitInfo.waitSemaphoreCount = 1;
@@ -2510,10 +2514,10 @@ private:
         // 첫 번째 매개변수는 렌더 패스 자체와 바인딩할 어태치먼트 입니다. 색상 어태치먼트로 지정된 각각의 스왑 체인 이미지에 대해 프레임 버퍼를 만들었습니다. 따라서 그리려는 스왑체인 이미지에 대한 프레임 버퍼를 바인딩해야 합니다. 전달된 imageIndex 매개변수를 사용하여 현재 스왑체인 이미지에 적합한 프레임 버퍼를 선택할 수 있습니다.
         renderPassInfo.renderPass = renderPass;
         renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-        // 다음 두 매개변수는 렌더 영역의 크기를 정의합니다. 렌더 영역은 셰이더 로드 및 저장이 수행되는 위치를 정의합니다. 이 영역 밖의 픽셀에는 정의되지 않은 값이 있습니다. 최상의 성능을 위해 첨부 파일의 크기와 일치해야 합니다.
+        // 다음 두 매개변수는 렌더 영역의 크기를 정의합니다. 렌더 영역은 셰이더 로드 및 저장이 수행되는 위치를 정의합니다. 이 영역 밖의 픽셀에는 정의되지 않은 값이 있습니다. 최상의 성능을 위해 어태치먼트의 크기와 일치해야 합니다.
         renderPassInfo.renderArea.offset = { 0, 0 };
         renderPassInfo.renderArea.extent = swapChainExtent;
-        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 첨부에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다. @@@
+        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 어태치먼트에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다. @@@
         std::array<VkClearValue, 2> clearValues{};
         clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         clearValues[1].depthStencil = { 1.0f, 0 };
@@ -2530,7 +2534,7 @@ private:
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         // 이제 그래픽 파이프라인을 바인딩할 수 있습니다.
-        // 두 번째 매개변수는 파이프라인 개체가 그래픽 또는 컴퓨팅 파이프라인인지 지정합니다. 이제 Vulkan에 그래픽 파이프라인에서 실행할 작업과 프래그먼트 셰이더에서 사용할 첨부 파일을 지정했으므로 남은 것은 삼각형을 그리도록 지시하는 것뿐입니다.
+        // 두 번째 매개변수는 파이프라인 개체가 그래픽 또는 컴퓨팅 파이프라인인지 지정합니다. 이제 Vulkan에 그래픽 파이프라인에서 실행할 작업과 프래그먼트 셰이더에서 사용할 어태치먼트을 지정했으므로 남은 것은 삼각형을 그리도록 지시하는 것뿐입니다.
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
 

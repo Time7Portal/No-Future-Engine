@@ -33,28 +33,17 @@ layout(location = 1) out vec2 fragTexCoord;
 // 각각의 버텍스마다 수행
 void main()
 {
-	// << 1차 테스트용 셰이더 : 하드코딩된 테스트 3각형 출력 >>
-	// gl_Position : 버텍스 셰이더의 최종 아웃풋은 gl_Position 에 담기로 약속되어 있음
-	// gl_VertexIndex : GLSL의 gl_VertexID와 동일, 처음 렌더링 명령이 시작될 때부터 지금까지 처리된 버텍스가 몇번째인지 담고 있음
-	// 0.0 : z 축 위치값
-	// 1.0 : w 값 (Clip coordinate 에서 Normalized Device Coordinate 로 가기 위해 최종적으로 모든 위치 스칼라들을 이 수로 나눔)
-	
-	// 하드코딩된 테스트 삼각형 출력용
-	//gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
-	//fragColor = colors[gl_VertexIndex]; // 프레그먼트 셰이더로 전달할때 중간값 보간 자동으로 수행
-
-	// << 2차 테스트용 셰이더 : 버텍스 버퍼로부터 받아서 삼각형, 사각형 출력 >>
-	// 버텍스 버퍼로부터 x, y 위치값 전달 받아서 출력
-	//gl_Position = vec4(inPosition, 0.0, 1.0);
-	//fragColor = inColor;
-
-
 	// << 3차 테스트용 셰이더 : 유니폼 버퍼로부터 MVP 변환행렬 받아서 3D 월드 내 평면 출력 >>
 	// https://vulkan-tutorial.com/Uniform_buffers/Descriptor_pool_and_sets
 	// (ubo 유니폼 버퍼가 담긴 디스크립터 풀) 을 묶은 디스크립터 셋이 바인딩 되어 있어야 에러 없이 실행됨 !!
 	// 우리는 이전 장의 직사각형이 3D에서 회전하도록 매 프레임마다 모델, 보기 및 투영 행렬을 업데이트하여 클립 좌표계에서의 위치를 구하고 gl_Position 로 반환할 것입니다.
-	// 클립 좌표계이므로 맨 마지막 요소로 vec4(inPosition, 0.0, 1.0) 에 추가된 1.0 는 나중에 퍼스펙티브 프로젝션(원근 뷰)에 사용하기 위한 나누기 요소로 쓰여서 가까이 있는 오브젝트를 크게 보여주고 멀리 있는 오브젝트는 작게 보이도록 해줍니다.
+	// 클립 좌표계이므로 맨 마지막 요소로 vec4(inPosition, 0.0, 1.0) 에 추가된 1.0 는 w 값으로 (Clip coordinate 에서 Normalized Device Coordinate 로 가기 위해 최종적으로 모든 위치 스칼라들을 이 수로 나눔) 나중에 퍼스펙티브 프로젝션(원근 뷰)에 사용하기 위한 나누기 요소로 쓰여서 가까이 있는 오브젝트를 크게 보여주고 멀리 있는 오브젝트는 작게 보이도록 해줍니다.
 	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
     fragColor = inColor;
 	fragTexCoord = inTexCoord;
+
+
+
+	// gl_Position : 버텍스 셰이더의 최종 아웃풋은 gl_Position 에 담기로 약속되어 있음
+	// gl_VertexIndex : GLSL의 gl_VertexID와 동일, 처음 렌더링 명령이 시작될 때부터 지금까지 처리된 버텍스가 몇번째인지 담고 있음
 }
