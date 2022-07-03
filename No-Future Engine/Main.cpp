@@ -164,7 +164,7 @@ struct Vertex
         attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributeDescriptions[1].offset = offsetof(Vertex, color);
 
-        // @@@@@@@@@ : 텍스쳐 코디네이트 추가
+        // 텍스쳐를 입히기 위해 UV 좌표를 추가하였습니다.
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].location = 2;
         attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
@@ -358,31 +358,31 @@ private:
 
         createGraphicsPipeline();       // 2-9. 셰이더 로드 및 그래픽스 파이프라인 생성
 
-        createCommandPool();            // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
+        createCommandPool();            // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
 
-        createDepthResources();         // @@@
+        createDepthResources();         // 2-11. @@@
 
-        createFramebuffers();           // 2-10. 프레임 버퍼들을 생성
+        createFramebuffers();           // 2-12. 프레임 버퍼들을 생성
 
-        createTextureImage();           // 2-12. 이미지(텍스쳐) 파일 로드
+        createTextureImage();           // 2-13. 이미지(텍스쳐) 파일 로드
 
-        createTextureImageView();       // 2-13. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
+        createTextureImageView();       // 2-14. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
 
-        createTextureSampler();         // 2-14. @@@@@@
+        createTextureSampler();         // 2-15. 텍스쳐를 샘플링 하기 위해 샘플러 객체를 생성합니다. (이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.)
 
-        createVertexBuffer();           // 2-15. 버텍스 버퍼 생성
+        createVertexBuffer();           // 2-16. 버텍스 버퍼 생성
 
-        createIndexBuffer();            // 2-16. 인덱스 버퍼 생성
+        createIndexBuffer();            // 2-17. 인덱스 버퍼 생성
 
-        createUniformBuffers();         // 2-17. 유니폼 버퍼 생성
+        createUniformBuffers();         // 2-18. 유니폼 버퍼 생성
 
-        createDescriptorPool();         // 2-18. 디스크립터 풀 생성
+        createDescriptorPool();         // 2-19. 디스크립터 풀 생성
 
-        createDescriptorSets();         // 2-19. 디스크립터 셋 생성
+        createDescriptorSets();         // 2-20. 디스크립터 셋 생성
 
-        createCommandBuffers();         // 2-20. 그래픽 카드로 보낼 커맨드 버퍼 생성
+        createCommandBuffers();         // 2-21. 그래픽 카드로 보낼 커맨드 버퍼 생성
 
-        createSyncObjects();            // 2-21. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+        createSyncObjects();            // 2-22. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     }
 
 
@@ -1534,7 +1534,7 @@ private:
 
 
 
-    // 2-10. 프레임 버퍼들을 생성
+    // 2-12. 프레임 버퍼들을 생성
     inline void createFramebuffers()
     {
         // 렌더 패스 생성 중에 지정된 어태치먼트는 VkFramebuffer 개체로 래핑하여 바인딩됩니다. 프레임 버퍼 개체는 어태치먼트를 나타내는 모든 VkImageView 개체를 참조합니다. 우리의 경우 그것은 단 하나일 것입니다: 색상 어태치먼트. 그러나 어태치먼트에 사용해야 하는 이미지는 프레젠테이션을 위해 스왑 체인이 반환하는 이미지에 따라 다릅니다. 때문에 스왑 체인에 들어있는 모든 이미지들에 대해 프레임 버퍼를 생성하고 드로잉 시 회수된 이미지에 해당하는 프레임 버퍼를 사용해야 합니다.
@@ -1569,7 +1569,7 @@ private:
 
 
 
-    // 2-11. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성
+    // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성
     inline void createCommandPool()
     {
         // 그리기 작업 및 메모리 전송과 같은 Vulkan의 명령은 함수 호출을 사용하여 직접 실행되지 않습니다. 커맨드 버퍼 개체에 수행하려는 모든 작업을 기록해야 합니다. 이것의 장점은 우리가 하고 싶은 것을 Vulkan 에게 한꺼번에 전달하고 Vulkan이 모든 명령을 함께 사용할 수 있기 때문에 명령을 더 효율적으로 처리할 수 있습니다. 또한 원하는 경우 여러 스레드에서 명령 기록을 수행할 수도 있습니다.
@@ -1639,7 +1639,7 @@ private:
 
 
 
-    // 2-12. 이미지(텍스쳐) 파일 로드
+    // 2-13. 이미지(텍스쳐) 파일 로드
     void createTextureImage()
     {
         // 애플리케이션에 텍스처를 추가하려면 다음 단계가 필요합니다.
@@ -1854,7 +1854,7 @@ private:
 
 
 
-    // 2-13. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
+    // 2-14. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
     inline void createTextureImageView()
     {
         // 이 장에서는 그래픽 파이프라인이 이미지를 샘플링하는 데 필요한 리소스를 두 개 더 만들 것입니다. 첫 번째 리소스는 이전에 스왑 체인 이미지에서 이미 본 것이지만 두 번째 리소스는 새로운 것입니다. 이는 셰이더가 이미지에서 텍셀을 읽는 방법과 관련이 있습니다. 이전에 스왑 체인 이미지와 프레임 버퍼를 사용하여 이미지에 직접 액세스하지 않고 이미지 뷰를 통해 액세스하는 것을 보았습니다. 또한 텍스처 이미지에 대해 이러한 이미지 뷰를 생성해야 합니다. 텍스처 이미지에 대한 VkImageView를 보유할 클래스 멤버 textureImageView를 추가하고 이를 생성할 새 함수 createTextureImageView를 만듭니다.
@@ -1863,7 +1863,7 @@ private:
 
 
 
-    // 2-14. 텍스쳐를 샘플링 하기 위해 샘플러 객체를 생성합니다. (이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.)
+    // 2-15. 텍스쳐를 샘플링 하기 위해 샘플러 객체를 생성합니다. (이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.)
     inline void createTextureSampler()
     {
         // 셰이더가 이미지에서 직접 텍셀을 읽는 것도 가능하지만 텍스처로 사용되는 경우에는 그리 일반적이지 않습니다. 텍스쳐는 일반적으로 최종 색상을 계산하기 위한 필터링 및 변환을 적용하는 샘플러를 통해 액세스됩니다. 이러한 필터는 오버샘플링과 같은 문제를 처리하는 데 유용합니다. 텍스쳐를 단순한 텍셀보다는 지오메트리에 매핑된 프레그먼트로 간주하는 것이 좋습니다. 각 프래그먼트의 텍스처 좌표에 대해 가장 가까운 텍셀을 사용하기만 한다면 https://vulkan-tutorial.com/images/texture_filtering.png 에서 No filtering 이미지 예시와 같은 결과를 얻을 수 있습니다. 하지만 선형 보간법을 통해 가장 가까운 4개의 텍셀을 결합하면 오른쪽과 같이 더 부드러운 결과를 얻을 수 있습니다. 물론 응용 프로그램에 따라 No filtering 스타일에 더 적합한 아트 스타일이 요구될 수 있지만(Minecraft 처럼), 기존 그래픽 응용 프로그램에서는 filtering 방식이 선호됩니다. 샘플러 개체는 텍스처에서 색상을 읽을 때 자동으로 이 필터링을 적용합니다. 반면에 언더샘플링은 반대로 프레그먼츠보다 텍셀이 더 많을 때 발생하는 문제입니다. 낮은 각도에서 바둑판 텍스처와 같은 고주파수 패턴을 샘플링할 때 아티팩트가 발생합니다. https://vulkan-tutorial.com/images/anisotropic_filtering.png 왼쪽 이미지와 같이 멀리 갈수록 텍셀 밀도에 비해 프레그먼트 밀도가 낮아 흐릿하게 보입니다. 이에 대한 솔루션은 샘플러에 의해 자동으로 적용될 수도 있는 등방성 필터링입니다. 이러한 필터 외에도 샘플러는 변환을 처리할 수도 있습니다. addressing mode를 통해 이미지 해상도를 넘는 텍셀을 읽으려고 할 때 어떤 일이 발생하는지 결정합니다. https://vulkan-tutorial.com/images/texture_addressing.png 예시에서 몇 가지 가능성을 보여줍니다. 이제 이러한 샘플러 객체를 설정하기 위해 createTextureSampler 함수를 생성하였습니다. 이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.
@@ -1912,7 +1912,7 @@ private:
 
 
 
-    // 2-15. 버텍스 버퍼 생성
+    // 2-16. 버텍스 버퍼 생성
     // Vulkan의 버퍼는 그래픽 카드에서 읽을 수 있는 임의의 데이터를 저장하는 데 사용되는 메모리 영역입니다. 그것들은 버텍스 데이터를 저장하는 데 사용할 수 있으며, 물론 다른 많은 목적으로도 사용할 수 있습니다. 지금까지 다루었던 Vulkan 객체들과 달리 버퍼는 자동으로 메모리를 할당하지 않습니다. Vulkan API는 프로그래머가 거의 모든 것을 제어할 수 있도록 던져주며 메모리 관리는 그 중에 하나입니다.
     inline void createVertexBuffer()
     {
@@ -1961,7 +1961,7 @@ private:
 
 
 
-    // 2-16. 인덱스 버퍼 생성
+    // 2-17. 인덱스 버퍼 생성
     // createIndexBuffer 함수는 createVertexBuffer와 거의 동일합니다.
     void createIndexBuffer()
     {
@@ -1987,7 +1987,7 @@ private:
 
 
 
-    // 2-17. 유니폼 버퍼 생성
+    // 2-18. 유니폼 버퍼 생성
     inline void createUniformBuffers()
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -2002,7 +2002,7 @@ private:
 
 
 
-    // 2-18. 디스크립터 풀 생성
+    // 2-19. 디스크립터 풀 생성
     inline void createDescriptorPool()
     {
         // 이전 장에 다룬 디스크립터 레이아웃은 바인딩할 수 있는 디스크립터의 유형을 설명합니다. 이 장에서 우리는 각각의 VkBuffer 자원에 대한 디스크립터 세트를 생성하여 이를 유니폼 버퍼 디스크립터에 바인딩할 것입니다. 디스크립터 세트는 직접 만들 수 없으며 명령 버퍼를 처리할때와 비슷하게 풀을 먼저 만들어 할당해야 합니다. 디스크립터 집합에 해당하는 것을 당연히 디스크립터 풀이라고 합니다. 우리는 그것을 설정하기 위해 새로운 함수 createDescriptorPool을 작성할 것입니다.
@@ -2033,7 +2033,7 @@ private:
 
 
 
-    // 2-19. 디스크립터 셋 생성
+    // 2-120. 디스크립터 셋 생성
     inline void createDescriptorSets()
     {
         // 이제 디스크립터 세트 자체를 할당할 수 있습니다. 그 목적을 위해 createDescriptorSets 함수를 추가하였습니다. 디스크립터 세트 할당은 VkDescriptorSetAllocateInfo 구조체로 설명됩니다. 할당할 디스크립터 풀, 할당할 디스크립터 세트 수 및 기반으로 할 디스크립터 레이아웃을 지정해야 합니다. 우리의 경우 비행 중인 각 프레임에 대해 단 하나의 디스크립터 세트를 만들고 모두 동일한 레이아웃을 사용합니다. 불행히도 vkAllocateDescriptorSets 함수가 세트 수와 일치하는 배열 크기의 데이터를 기대하기 때문에 레이아웃의 모든 복사본이 들어가야 합니다.
@@ -2223,7 +2223,7 @@ private:
 
 
 
-    // 2-20. 그래픽 카드로 보낼 커맨드 버퍼 생성
+    // 2-21. 그래픽 카드로 보낼 커맨드 버퍼 생성
     inline void createCommandBuffers()
     {
         // 각각의 프레임 마다 커맨드 버퍼가 존재해야 하므로, 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 만큼으로 조정합니다.
@@ -2251,7 +2251,7 @@ private:
 
 
 
-    // 2-21. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+    // 2-22. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     inline void createSyncObjects()
     {
         // 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
