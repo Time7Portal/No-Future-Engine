@@ -366,7 +366,7 @@ private:
 
         createDepthResources();         // 2-11. 깊이 이미지 생성 (깊이 테스트를 위함)
 
-        createFramebuffers();           // 2-12. 프레임 버퍼들을 생성
+        createFramebuffers();           // 2-12. 프레임 버퍼들을 생성. 깊이 이미지 뷰가 생성된 후에 호출되어야 합니다.
 
         createTextureImage();           // 2-13. 이미지(텍스쳐) 파일 로드
 
@@ -1106,7 +1106,7 @@ private:
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 
-        // @@@
+        // 이제 깊이 어태치먼트를 포함하도록 createRenderPass를 수정할 것입니다. 먼저 VkAttachmentDescription을 지정합니다. 형식은 깊이 이미지 자체와 동일해야 합니다. 이번에는 깊이 데이터(storeOp)를 저장하는 데 신경 쓰지 않습니다. 그리기가 완료된 후에는 사용되지 않기 때문입니다. 이를 통해 하드웨어가 추가 최적화를 수행할 수 있습니다. 색상 버퍼와 마찬가지로 이전 깊이 내용은 신경 쓰지 않으므로 VK_IMAGE_LAYOUT_UNDEFINED를 initialLayout으로 사용할 수 있습니다.
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = findDepthFormat();
         depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1118,7 +1118,7 @@ private:
         depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 
-        // 서브패스 및 어태치먼트 파일 속성 설정
+        // 서브패스 및 어태치먼트 속성 설정
         // 하나의 렌더 패스는 여러 서브(하위)패스로 구성될 수 있습니다. 서브패스는 이전 패스의 프레임 버퍼 내용에 따라 달라지는 후속 렌더링 작업입니다(예: 차례로 적용되는 후처리 효과 시퀀스). 이러한 렌더링 작업을 하나의 렌더 패스로 그룹화하면 Vulkan은 작업을 재정렬하고 더 나은 성능을 위해 메모리 대역폭을 절약할 수 있습니다. 그러나 첫 번째 삼각형의 경우 단일 서브패스를 사용합니다.
         // 모든 서브패스는 하나 이상의 어태치먼트를 참조합니다. 이러한 참조는 다음과 같은 VkAttachmentReference 구조체로 표현합니다.
         // Attachment 파라미터는 어떤 어태치먼트를 참조할지 디스크립터 배열의 인덱스를 지정합니다. 우리의 배열은 단일 VkAttachmentDescription으로 구성되어 있으므로 인덱스는 0입니다. Vulkan은 서브패스가 시작될 때 자동으로 어태치먼트 파일을 이 레이아웃으로 전환합니다. 어태치먼트 파일을 사용하여 색상 버퍼 기능을 수행할 예정이며 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL 레이아웃은 이름에서 알 수 있듯이 최고의 성능을 제공합니다.
@@ -1126,8 +1126,7 @@ private:
         colorAttachmentRef.attachment = 0;
         colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-
-        // @@@
+        // 깊이 어태치먼트 설정도 추가하였습니다.
         VkAttachmentReference depthAttachmentRef{};
         depthAttachmentRef.attachment = 1;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -1145,7 +1144,7 @@ private:
         // pResolveAttachments : 멀티샘플링 색상 어태치먼트 파일에 사용되는 어태치먼트
         // pDepthStencilAttachment : 깊이 및 스텐실 데이터에 대한 어태치먼트
         // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 어태치먼트
-        subpass.pDepthStencilAttachment = &depthAttachmentRef; // @@@
+        subpass.pDepthStencilAttachment = &depthAttachmentRef; // 유일하게 존재하는 서브패스 하나에 대해 깊이 어태치먼트 참조를 추가합니다.
 
 
         // 서브패스 종속성 설정
@@ -1159,11 +1158,12 @@ private:
         dependency.srcAccessMask = 0;
         // 이를 기다려야 하는 작업은 색상 어태치먼트 단계에 있으며 색상 어태치먼트 쓰기가 포함됩니다. 이러한 설정은 실제로 필요하고 허용될 때까지 전환이 발생하지 않도록 방지합니다. 색상 쓰기를 시작하려는 경우.
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        // 마지막으로, 깊이 이미지의 전환과 로드 작업의 일부로 지워지는 사이에 충돌이 없도록 하기 위해 서브패스 종속성을 확장해야 합니다. 깊이 이미지는 초기 프레그먼트 테스트 파이프라인 단계에서 먼저 액세스되기 때문에 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT 플래그가 필요하며, 지우는 로드 작업이 있으므로 쓰기에 대한 액세스 마스크 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT 를 활성화 해야 합니다.
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        
 
-
-        // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다.
-        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment }; // @@@
+        // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다. 컬러 어태치먼트와 다르게 서브패스는 단일 깊이(+스텐실) 어태치먼트만 사용할 수 있습니다. 여러 버퍼에서 깊이 테스트를 수행하는 것은 사실상 의미가 없기 때문입니다. 추가로 두 어태치먼트들을 모두 보관하고 참조할 수 있도록 VkRenderPassCreateInfo 구조체를 업데이트 하였습니다.
+        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1368,14 +1368,23 @@ private:
 
         // 2-9-11. 깊이 및 스텐실 테스팅을 설정합니다.
         // 깊이 및/또는 스텐실 버퍼를 사용하는 경우 VkPipelineDepthStencilStateCreateInfo를 사용하여 깊이 및 스텐실 테스트도 구성해야 합니다. 지금 당장은 없으므로 그러한 구조체에 대한 포인터 대신 nullptr을 전달할 수 있습니다. 깊이 버퍼링 장에서 다시 다루겠습니다.
-        // @@@ ---아직은 코드없음--- 이제 코드 추가됨.
+        // 이제 깊이 어태치먼트를 사용할 준비가 되었지만 그래픽 파이프라인에서 깊이 테스트를 활성화해야 합니다. 이는 VkPipelineDepthStencilStateCreateInfo 구조체를 통해 구성됩니다.
         VkPipelineDepthStencilStateCreateInfo depthStencil{};
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        // depthTestEnable 필드는 새 조각의 깊이를 깊이 버퍼와 비교하여 폐기해야 하는지 여부를 지정합니다.
         depthStencil.depthTestEnable = VK_TRUE;
+        // depthWriteEnable 필드는 깊이 테스트를 통과한 조각의 새 깊이값이 실제로 깊이 버퍼에 기록되어야 하는지 여부를 지정합니다.
         depthStencil.depthWriteEnable = VK_TRUE;
+        // depthCompareOp 필드는 조각을 유지하거나 폐기하기 위해 수행되는 비교를 지정합니다. 우리는 더 낮은 깊이 = 더 가깝다는 규칙을 고수하고 있으므로 새 조각의 깊이는 더 작아야 통과시키는 조건을 사용합니다.
         depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        // depthBoundsTestEnable, minDepthBounds 및 maxDepthBounds 필드는 선택적 깊이 경계 테스트에 사용됩니다. 기본적으로 이렇게 하면 지정된 깊이 범위에 속하는 조각만 유지할 수 있습니다. 우리는 이 기능을 사용하지 않을 것입니다.
         depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.minDepthBounds = 0.0f; // Optional
+        depthStencil.maxDepthBounds = 1.0f; // Optional
+        // 마지막 세 필드는 스텐실 버퍼 작업을 구성하며 이 자습서에서는 사용하지 않습니다. 이러한 작업을 사용하려면 깊이/스텐실 이미지의 형식에 스텐실 구성 요소가 포함되어 있는지 확인해야 합니다.
         depthStencil.stencilTestEnable = VK_FALSE;
+        depthStencil.front = {}; // Optional
+        depthStencil.back = {}; // Optional
 
 
         // 2-9-12. 컬러 블랜딩을 설정합니다.
@@ -1455,7 +1464,8 @@ private:
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
-        pipelineInfo.pDepthStencilState = &depthStencil; // Optional @@@
+        // 방금 채운 깊이 스텐실 상태를 참조하도록 VkGraphicsPipelineCreateInfo 구조체를 업데이트합니다. 렌더 패스에 깊이 스텐실 어태치먼트가 포함된 경우 깊이 스텐실 상태를 항상 설정해야 합니다.
+        pipelineInfo.pDepthStencilState = &depthStencil; // Optional
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = nullptr; // Optional
         // 파이프라인 레이아웃과 렌더패스는 특이하게 구조체 포인터가 아닌 핸들을 집어넣습니다.
@@ -1547,8 +1557,10 @@ private:
         // 모든 스왑체인 이미지 뷰들에 대한 프레임 버퍼를 만듭니다.
         for (size_t i = 0; i < swapChainImageViews.size(); i++)
         {
+            // 다음 단계는 깊이 이미지를 깊이 어태치먼트에 바인딩하도록 프레임 버퍼 생성을 수정하는 것입니다. createFramebuffers로 이동하여 깊이 이미지 뷰를 두 번째 어태치먼트로 지정합니다.
             std::array<VkImageView, 2> attachments = {
                 swapChainImageViews[i],
+                // 색상 어태치먼트는 스왑 체인 이미지마다 다르지만 모든 스왑 체인 이미지에서 동일한 깊이 이미지를 사용할 수 있습니다. 이유는 세마포어로 인해 오직 하나의 서브패스만 동시에 실행되기 때문입니다.
                 depthImageView
             };
 
@@ -1613,6 +1625,11 @@ private:
         // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다.
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
         // 여기까지가 깊이 이미지를 만들기 위한 것입니다. 색상 어태치먼트처럼 렌더 패스의 시작 부분에서 갱신할 것이기 때문에 매핑하거나 다른 이미지를 복사할 필요가 없습니다.
+        
+        // --- 사실 이 부분은 렌더 패스에서 처리할 것이기 때문에 이미지 레이아웃을 깊이 어태치먼트로 명시적으로 전환할 필요가 없습니다. 그러나 완전성을 위해 이 섹션에서 프로세스에 대해 계속 설명하겠습니다. 아래 코드는 원하시면 스킵하셔도 됩니다. (Optional)
+        // 다음과 같이 createDepthResources 함수의 끝에서 transitionImageLayout을 호출합니다.
+        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        // --- (Optional)
     }
 
     // 깊이 이미지를 만들때 어떤 형식으로 만드는 것이 현재 디바이스에서 가장 좋을지 최고의 후보를 골라주는 헬퍼함수
@@ -1797,7 +1814,20 @@ private:
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         // image 및 subresourceRange는 영향을 받는 이미지와 이미지의 특정 부분을 지정합니다. 현재 우리의 이미지는 배열이 아니며 밉매핑 수준이 없으므로 하나의 수준과 레이어만 지정됩니다.
         barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        // 정의되지 않은 레이아웃은 중요한 기존 깊이 이미지 콘텐츠가 없기 때문에 초기 레이아웃으로 사용할 수 있습니다. 올바른 하위 리소스를 사용하려면 transitionImageLayout 의 일부 로직을 업데이트해야 합니다. 지금은 스텐실 요소를 사용하지 않지만 깊이 이미지의 레이아웃 전환을 위해 넣었습니다. 
+        if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+            if (hasStencilComponent(format))
+            {
+                barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
+        }
+        else
+        {
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.baseArrayLayer = 0;
@@ -1826,6 +1856,15 @@ private:
 
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        {
+            // 마지막으로 올바른 액세스 마스크와 파이프라인 단계를 추가합니다.
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         }
         else
         {
@@ -2536,9 +2575,10 @@ private:
         // 다음 두 매개변수는 렌더 영역의 크기를 정의합니다. 렌더 영역은 셰이더 로드 및 저장이 수행되는 위치를 정의합니다. 이 영역 밖의 픽셀에는 정의되지 않은 값이 있습니다. 최상의 성능을 위해 어태치먼트의 크기와 일치해야 합니다.
         renderPassInfo.renderArea.offset = { 0, 0 };
         renderPassInfo.renderArea.extent = swapChainExtent;
-        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR에 사용할 명확한 값을 정의합니다. 이 값은 색상 어태치먼트에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다. @@@
+        // 마지막 두 매개변수는 VK_ATTACHMENT_LOAD_OP_CLEAR 할때 사용할 명확한 값을 정의합니다. 이 값은 색상 어태치먼트에 대한 로드 작업으로 사용되었습니다. 클리어 색상을 단순히 100% 불투명도의 검정색으로 정의했습니다. 이제 VK_ATTACHMENT_LOAD_OP_CLEAR 할 여러 어태치먼트들이 있으므로 여러 clear 값도 지정해야 합니다. recordCommandBuffer로 이동하여 VkClearValue 구조체의 배열을 만듭니다.
         std::array<VkClearValue, 2> clearValues{};
         clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+        // 깊이 버퍼의 깊이 범위는 Vulkan에서 0.0 ~ 1.0입니다. 여기서 1.0은 원거리 뷰 평면에 있고 0.0은 근거리 뷰 평면에 있습니다. 깊이 버퍼의 각 지점에서 초기 값은 가능한 가장 먼 깊이인 1.0 이어야 합니다. clearValues의 순서는 어태치먼트들의 순서와 동일해야 합니다.
         clearValues[1].depthStencil = { 1.0f, 0 };
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -2676,7 +2716,7 @@ private:
     // 스왑 체인을 다시 만들기 전에 이전 버전을 정리합니다. 또는 프로그램 종료를 위해 스왑 체인에 쓰인 모든 개체들을 지웁니다.
     HELPER_FUNCTION void cleanupSwapChain()
     {
-        // @@@
+        // 스왑 체인을 지울때 깊이 이미지에 관련된 모든 것들도 정리해야 합니다.
         vkDestroyImageView(device, depthImageView, nullptr);
         vkDestroyImage(device, depthImage, nullptr);
         vkFreeMemory(device, depthImageMemory, nullptr);
