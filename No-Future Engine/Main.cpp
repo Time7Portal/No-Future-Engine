@@ -1606,19 +1606,36 @@ private:
         // 2. VK_FORMAT_D32_SFLOAT_S8_UINT : 깊이 및 8비트 스텐실 구성 요소에 대한 32비트 부호 있는 부동 소수점
         // 3. VK_FORMAT_D24_UNORM_S8_UINT : 깊이 및 8비트 스텐실 구성 요소에 대한 24비트 부동 소수점
         // 스텐실 구성 요소는 스텐실 테스트 https://en.wikipedia.org/wiki/Stencil_buffer 에 사용되며, 이는 깊이 테스트와 결합할 수 있는 추가 테스트입니다. 이에 대해서는 다음 장에서 살펴보겠습니다.
-
         VkFormat depthFormat = findDepthFormat();
 
+        // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다.
         createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다.
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        // 여기까지가 깊이 이미지를 만들기 위한 것입니다. 색상 어태치먼트처럼 렌더 패스의 시작 부분에서 갱신할 것이기 때문에 매핑하거나 다른 이미지를 복사할 필요가 없습니다.
     }
 
     // 깊이 이미지를 만들때 어떤 형식으로 만드는 것이 현재 디바이스에서 가장 좋을지 최고의 후보를 골라주는 헬퍼함수
+    HELPER_FUNCTION VkFormat findDepthFormat()
+    {
+        // findSupportedFormat 함수를 사용하여 findDepthFormat 도우미 함수를 만들어 깊이 어태치먼트로 사용을 지원하는 깊이 구성 요소가 있는 형식을 선택합니다. 이 경우 VK_IMAGE_USAGE_ 대신 VK_FORMAT_FEATURE_ 플래그를 사용해야 합니다.
+        return findSupportedFormat(
+            { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        );
+    }
+
+    // 해당하는 이미지 형식에 대응하는 타일링 방식과 추가 기능들을 그래픽카드에서 지원하는지 후보군에서 검사하는 헬퍼함수
     HELPER_FUNCTION VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
     {
-        // VK_FORMAT_D32_SFLOAT 형식에 대한 지원이 가장 일반적이고 흔하게 사용되지만 (하드웨어 데이터베이스 참조), 하드웨어에서 지원하지 않을 가능성을 고려하여 가능하면 애플리케이션에 유연성을 추가하는 것이 좋습니다. 때문에 가장 바람직한 것부터 가장 바람직하지 않은 것 순으로 후보를 취하고 어떤 것이 가장 적합한 형식인지 확인하는 함수 findSupportedFormat을 작성하였습니다.
+        // VK_FORMAT_D32_SFLOAT 형식에 대한 지원이 가장 일반적이고 흔하게 사용되지만 (하드웨어 데이터베이스 참조), 하드웨어에서 지원하지 않을 가능성을 고려하여 가능하면 애플리케이션에 유연성을 추가하는 것이 좋습니다. 때문에 가장 바람직한 것부터 가장 바람직하지 않은 것 순으로 후보를 취하고 어떤 것이 가장 적합한 형식인지 확인하는 함수 findSupportedFormat을 작성하였습니다. 형식 지원은 타일링 모드 및 사용법에 따라 다르므로 이를 매개변수로 포함해야 합니다. vkGetPhysicalDeviceFormatProperties 함수를 사용하여 그래픽카드가 지원하는 형식들을 쿼리할 수 있습니다.
         for (VkFormat format : candidates)
         {
+            // VkFormatProperties 구조체에는 세 개의 필드가 있습니다.
+            // 1. linearTilingFeatures : 선형 타일링으로 지원되는 사용 사례
+            // 2. optimalTilingFeatures : 최적의 타일링으로 지원되는 사용 사례
+            // 3. bufferFeatures : 버퍼에 대해 지원되는 사용 사례
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
 
@@ -1632,22 +1649,14 @@ private:
             }
         }
 
+        // 원하는 형식을 지원하지 않으면 특수 값을 반환하거나 단순히 예외를 throw할 수 있습니다.
         throw std::runtime_error("Failed to find supported format!");
     }
 
-    // 
-    HELPER_FUNCTION VkFormat findDepthFormat()
-    {
-        return findSupportedFormat(
-            { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
-            VK_IMAGE_TILING_OPTIMAL,
-            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
-        );
-    }
-
-    // 
+    // 해당하는 이미지 형식이 스텐실 요소를 가지고 있는지 확인하는 헬퍼함수
     HELPER_FUNCTION bool hasStencilComponent(VkFormat format)
     {
+        // 모든 형식 후보군에는 깊이 요소를 포함하지만 후자의 두 형식에는 스텐실 요소도 포함하고 있습니다. 스텐실은 아직 사용하지는 않지만 이미지에 레이아웃 전환을 수행할 경우 이를 고려해야 합니다. 선택한 깊이 형식에 스텐실 구성 요소가 포함되어 있는지 알려주는 간단한 도우미 함수를 추가합니다. S8_UINT = 8 unsigned integer bits in the stencil component
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
@@ -2464,7 +2473,7 @@ private:
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
-        createDepthResources(); // @@@
+        createDepthResources();
         createFramebuffers();
     }
 
