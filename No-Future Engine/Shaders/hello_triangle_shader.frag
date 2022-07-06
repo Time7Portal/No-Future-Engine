@@ -28,6 +28,10 @@ void main()
 	// 텍스처는 texture() 라는 빌트인 함수를 사용하여 샘플링됩니다. 샘플러와 좌표를 인수로 사용합니다. 샘플러는 백그라운드에서 필터링 및 변환을 자동으로 처리합니다. 이제 응용 프로그램을 실행할 때 사각형에 텍스처가 표시되어야 합니다.
 	// fragColor 를 20% 만 적용하여 약하게 색상을 넣고 (알파는 1로 고정) fragTexCoord 에 2를 곱해서 텍스쳐를 VK_SAMPLER_ADDRESS_MODE_REPEAT 를 시험하였습니다.
 	//outColor = ( vec4(fragColor, 1.0) * 0.2) + texture(texSampler, fragTexCoord * 2);
-	outColor = vec4( (fragColor * 0.2) + texture(texSampler, fragTexCoord * 2).rgb , 1.0); // 위랑 같은 코드
+	//outColor = vec4( (fragColor * 0.2) + texture(texSampler, fragTexCoord * 2).rgb , 1.0); // 위랑 같은 코드
+
+	// 순수하게 원본 텍스쳐만 출력
+	outColor = texture(texSampler, fragTexCoord);
+
 	// 이제 셰이더에서 이미지에 액세스하는 방법을 알게 되었습니다! 이것은 프레임 버퍼에서도 기록되는 이미지와 결합할 때 매우 강력한 기술입니다. 이러한 이미지를 입력으로 사용하여 3D 세계 내에서 후처리 및 카메라 디스플레이와 같은 멋진 효과를 구현할 수 있습니다.
 }

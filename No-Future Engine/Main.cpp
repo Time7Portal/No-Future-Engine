@@ -45,8 +45,8 @@ constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
 // @
-const std::string MODEL_PATH = "models/viking_room.obj";
-const std::string TEXTURE_PATH = "textures/viking_room.png";
+const std::string MODEL_PATH = "Models/viking_room.obj";
+const std::string TEXTURE_PATH = "Textures/viking_room.png";
 
 
 // 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
@@ -183,7 +183,25 @@ struct Vertex
 
         return attributeDescriptions;
     }
+
+    // @
+    bool operator==(const Vertex& other) const
+    {
+        return position == other.position && color == other.color && texCoord == other.texCoord;
+    }
 };
+
+// @
+namespace std
+{
+    template<> struct hash<Vertex>
+    {
+        size_t operator()(Vertex const& vertex) const
+        {
+            return ((hash<glm::vec3>()(vertex.position) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
+        }
+    };
+}
 
 
 // 이제 버텍스 셰이더에 각 버텍스별로 존재하는 속성(위치, 색상 등)을 전달할 수 있지만 전역 변수 하나만도 전달할 수 있을까요? 3D 그래픽을 다루기 위해서는 모델-뷰-투영 매트릭스가 필요합니다. 이를 버텍스 데이터에 포함할 수 있지만 이는 메모리 낭비이며 변환이 갱신될 때마다 모든 버텍스 버퍼를 업데이트해야 하므로 비 효율적입니다. 카메라나 오브젝트가 매 프레임 이동하는 것과 같이 모델-뷰-투영 매트릭스 변환은 일반적으로 매 프레임마다 달라집니다. Vulkan에서 이 문제를 해결하는 올바른 방법은 리소스 디스크립터를 사용하는 것입니다. 디스크립터는 셰이더가 버퍼 및 이미지와 같은 리소스에 자유롭게 액세스할 수 있는 방법입니다. 변환 행렬을 포함하는 버퍼를 설정하고 버텍스 셰이더가 디스크립터를 통해 액세스하도록 합니다.
@@ -210,7 +228,7 @@ struct UniformBufferObject
 
 // GLM 은 사용하기 편하도록 셰이더 언어에서 사용되는 벡터 타입과 정확히 일치하는 C++ 타입을 제공합니다.
 // interleaving vertex attributes 순서로 저장합니다 : { {위치}, {RGB 색상}, {텍스쳐 UV 위치} }
-const std::vector<Vertex> vertices = {
+const std::vector<Vertex> vertices_sample = {
     // 직사각형을 그립니다. 네 모서리를 나타내도록 버텍스 데이터를 작성합니다. 왼쪽 위 모서리는 빨간색, 오른쪽 위 모서리는 녹색, 오른쪽 아래 모서리는 파란색, 왼쪽 아래 모서리는 흰색입니다.인덱스 버퍼의 내용을 나타내기 위해 새로운 배열 인덱스를 추가할 것입니다. 오른쪽 위 삼각형과 왼쪽 아래 삼각형을 그리려면 그림의 인덱스와 일치해야 합니다. 텍스처 좌표에 대한 vec2를 포함하도록 Vertex 구조체를 수정합니다. 정점 셰이더에서 입력으로 텍스처 좌표에 액세스할 수 있도록 VkVertexInputAttributeDescription도 추가해야 합니다. 정사각형 표면을 가로지르는 보간을 위해 프래그먼트 셰이더에 전달할 수 있어야 합니다. 이 튜토리얼에서는 왼쪽 상단 모서리의 0, 0에서 오른쪽 하단 모서리의 1, 1까지의 좌표를 사용하여 사각형을 텍스처로 채울 것입니다. 0보다 작거나 1보다 큰 좌표로도 자유롭게 실험해 볼 수 있습니다. (UV 값이 0 미만 또는 1 초과를 하더라도 VK_SAMPLER_ADDRESS_MODE_REPEAT 로 패턴이 반복되게 설정되어 있는 상태입니다) 지금까지 작업한 지오메트리는 3D로 투영되지만 완전히 평평합니다. 이 장에서는 진정한 3D 메쉬를 보여주기 위해 position에 Z 좌표를 추가합니다. 이 세 번째 좌표를 사용하여 현재 사각형 아래에 Z 위치가 -0.5f 값을 가지는 사각형을 배치하여 기하 도형이 깊이별로 정렬되지 않을 때 발생하는 문제를 확인합니다.
     {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
     {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
@@ -224,7 +242,7 @@ const std::vector<Vertex> vertices = {
 };
 
 // 직사각형을 그리기 위해 사용될 버텍스 순서입니다.
-const std::vector<uint16_t> indices = {
+const std::vector<uint16_t> indices_sample = {
     // 실제 응용 프로그램에서 렌더링할 3D 메시는 종종 여러 삼각형 내 버텍스들을 공유할 수 있습니다. 공유할 버텍스들의 순서를 ID 로 활용하여 (인덱싱) 아래처럼 사각형을 그리는 것과 같은 간단한 작업에서도 사용할 수 있습니다. 사각형을 그리기 위해선 2개의 삼각형을 겹쳐 그려야 하는데 이때 2개의 버텍스는 중복되어 사용될 것이므로 이를 ID 로 공유해 사용하면 효율적입니다. 인덱스 버퍼는 본질적으로 버텍스 버퍼에 대한 포인터의 배열입니다. 버텍스 데이터를 재정렬하고 여러 버텍스에 대해 기존 데이터를 재사용할 수 있습니다. https://vulkan-tutorial.com/Vertex_buffers/Index_buffer 링크의 그림은 4개의 고유한 버텍스 각각을 포함하는 버텍스 버퍼가 있는 경우 사각형에 대한 인덱스 버퍼의 모양을 보여줍니다. 처음 세 개의 인덱스는 오른쪽 위 삼각형을 정의하고 마지막 세 개의 인덱스는 왼쪽 아래 삼각형의 버텍스를 정의합니다. 버텍스의 항목 수에 따라 인덱스 버퍼에 uint16_t 또는 uint32_t를 사용할 수 있습니다. 65535개 미만의 고유 버텍스을 사용하고 있기 때문에 지금은 uint16_t를 고수할 수 있습니다.
     0, 1, 2, 2, 3, 0,
     4, 5, 6, 6, 7, 4
@@ -273,6 +291,9 @@ private:
     VkImageView textureImageView;                       // 텍스쳐 이미지 뷰 핸들
     VkSampler textureSampler;                           // 텍스쳐 샘플러 핸들
     
+    std::vector<Vertex> vertices;                       // @
+    std::vector<uint32_t> indices;                      // @
+
     VkBuffer vertexBuffer;                              // 버텍스 버퍼 핸들
     VkDeviceMemory vertexBufferMemory;                  // 버텍스 버퍼가 들어있는 실제 메모리의 핸들
     // 버텍스 데이터와 마찬가지로 GPU가 인덱스에 액세스할 수 있도록 인덱스를 VkBuffer에 업로드해야 합니다.인덱스 버퍼에 대한 리소스를 보유할 두 개의 새 클래스 멤버를 정의합니다.
@@ -384,6 +405,8 @@ private:
         createTextureImageView();       // 2-14. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
 
         createTextureSampler();         // 2-15. 텍스쳐를 샘플링 하기 위해 샘플러 객체를 생성합니다. (이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.)
+
+        loadModel();                    // @
 
         createVertexBuffer();           // 2-16. 버텍스 버퍼 생성
 
@@ -1711,7 +1734,7 @@ private:
 
         // 이 라이브러리로 이미지를 로드하는 것은 정말 쉽습니다. stbi_load 함수는 파일 경로와 로드할 채널 수를 인자로 받습니다. STBI_rgb_alpha 값은 알파 채널이 없는 경우에도 이미지를 강제로 로드하므로 향후 여러 텍스처를 일관성있게 로드하기 좋습니다. 가운데 세 개의 매개변수는 이미지의 너비, 높이 및 실제 채널 수에 대한 출력입니다. 반환되는 포인터는 픽셀 값 배열의 첫 번째 요소입니다. STBI_rgb_alpha의 경우 픽셀당 4바이트로 픽셀 갯수는 총 texWidth * texHeight * 4(rgba) 입니다.
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load("Textures/texture2.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels)
@@ -1980,6 +2003,53 @@ private:
         if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create texture sampler!");
+        }
+    }
+
+
+
+    // @
+    void loadModel()
+    {
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warn, err;
+
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
+        {
+            throw std::runtime_error(warn + err);
+        }
+
+        std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+
+        for (const auto& shape : shapes)
+        {
+            for (const auto& index : shape.mesh.indices)
+            {
+                Vertex vertex{};
+
+                vertex.position = {
+                    attrib.vertices[3 * index.vertex_index + 0],
+                    attrib.vertices[3 * index.vertex_index + 1],
+                    attrib.vertices[3 * index.vertex_index + 2]
+                };
+
+                vertex.texCoord = {
+                    attrib.texcoords[2 * index.texcoord_index + 0],
+                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+                };
+
+                vertex.color = { 1.0f, 1.0f, 1.0f };
+
+                if (uniqueVertices.count(vertex) == 0)
+                {
+                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                    vertices.push_back(vertex);
+                }
+
+                indices.push_back(uniqueVertices[vertex]);
+            }
         }
     }
 
@@ -2537,8 +2607,8 @@ private:
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo{};
-        // glm::rotate 함수는 기존 변형, 회전 각도 및 회전 축을 매개변수로 사용합니다. glm::mat4(1.0f) 생성자는 단위 행렬을 반환합니다. time * glm::radians(90.0f) 회전 각도를 사용하여 초당 90도 회전을 합니다.
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        // glm::rotate 함수는 기존 변형, 회전 각도 및 회전 축을 매개변수로 사용합니다. glm::mat4(1.0f) 생성자는 단위 행렬을 반환합니다. time * glm::radians(90.0f) 회전 각도를 사용하여 초당 90도 회전을 합니다. @@@@@@ 회전속도를 느리게 하기 위해 초당 30도로 변경하였음.
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(30.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         // 뷰 변환을 위해 위에서 45도 각도로 지오메트리를 보기로 결정했습니다. glm::lookAt 함수는 눈 위치, 중심 위치 및 위쪽 축을 매개변수로 사용합니다.
         ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         // 저는 45도 수직 시야각으로 원근 투영을 사용하기로 선택했습니다. 다른 매개변수는 종횡비, 근거리 및 원거리 보기 평면입니다. 크기 조정 후 창의 새 너비와 높이를 고려하려면 현재 스왑 체인 범위를 사용하여 종횡비를 계산하는 것이 중요합니다. 이제 투영 행렬이 종횡비를 수정하기 때문에 직사각형이 정사각형으로 변경되었습니다. updateUniformBuffer는 화면 크기 조정을 처리하므로 recreateSwapChain 에서 설정한 디스크립터를 다시 만들 필요가 없습니다.
@@ -2617,7 +2687,7 @@ private:
 
         // 인덱스 버퍼를 활용하여 그립니다.
         // 그리기에 인덱스 버퍼를 사용하면 recordCommandBuffer에 두 가지 변경 사항이 포함됩니다. 버텍스 버퍼에 대해 했던 것처럼 먼저 인덱스 버퍼를 바인딩해야 합니다. 차이점은 하나의 인덱스 버퍼만 가질 수 있다는 것입니다. 불행히도 각 버텍스의 세부 속성 활용을 위해 다른 인덱스를 사용할 수는 없으므로 하나의 속성만 달라지더라도 꼭짓점 데이터를 완전히 복제해 새로 구성해야 합니다. 인덱스 버퍼는 인덱스 버퍼, 바이트 오프셋 및 인덱스 데이터 유형을 매개 변수로 포함하는 vkCmdBindIndexBuffer로 바인딩됩니다. 앞에서 언급했듯이 가능한 유형은 VK_INDEX_TYPE_UINT16 및 VK_INDEX_TYPE_UINT32입니다. 인덱스 버퍼를 바인딩하는 것만으로는 아직 아무 것도 변경되지 않습니다. 또한 Vulkan이 인덱스 버퍼를 사용하도록 지시하기 위해 그리기 명령을 변경해야 합니다. vkCmdDraw 줄을 제거하고 vkCmdDrawIndexed로 바꿉니다. 이 함수에 대한 호출은 vkCmdDraw와 매우 유사합니다. 처음 두 매개변수는 인덱스 수와 인스턴스 수를 지정합니다. 우리는 인스턴싱을 사용하지 않으므로 단지 1개의 인스턴스를 지정하였습니다. 인덱스 수는 버텍스 버퍼에 전달될 버텍스의 수를 나타냅니다. 다음 매개변수는 인덱스 버퍼에 대한 오프셋을 지정하며 값 1을 사용하면 그래픽 카드가 두 번째 인덱스에서 읽기 시작합니다. 마지막에서 두 번째 매개변수는 인덱스 버퍼의 인덱스에 추가할 오프셋을 지정합니다. 마지막 매개변수는 우리가 사용하지 않는 인스턴싱을 위한 오프셋을 지정합니다. 이제 프로그램을 실행하면 직사각형이 표시됩니다.
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 
         // 이제 vkCmdBindDescriptorSets를 사용하여 셰이더의 디스크립터에 각 프레임에 대해 설정된 올바른 디스크립터를 실제로 바인딩하기 위해 recordCommandBuffer 함수를 업데이트해야 합니다. 이것은 vkCmdDrawIndexed 호출 전에 수행해야 합니다. 버텍스 및 인덱스 버퍼와 달리 디스크립터 세트는 그래픽 파이프라인에 고유하지 않습니다. 따라서 디스크립터 세트를 그래픽 또는 컴퓨팅 파이프라인에 바인딩할지 여부를 지정해야 합니다. 다음 매개변수는 디스크립터의 기반이 되는 레이아웃입니다. 다음에 계속되는 세 개의 매개변수는 디스크립터 집합의 인덱스의 첫번째 요소, 바인딩할 집합 수 및 바인딩할 집합 배열을 지정합니다. 잠시 후 다시 이 문제로 돌아가겠습니다. 마지막 두 매개변수는 동적 디스크립터에 사용되는 오프셋 배열을 지정합니다. 미래 장에서 이에 대해 살펴보겠습니다.
