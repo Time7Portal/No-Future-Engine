@@ -3,11 +3,16 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // GLM 에 의해 생성된 원근 투영 행렬은 기본적으로 -1.0 ~ +1.0 의 OpenGL 기본 깊이 범위를 사용합니다. GLM_FORCE_DEPTH_ZERO_TO_ONE 정의를 사용하여 0.0 ~ 1.0 의 Vulkan 범위를 사용하도록 해야 합니다.
+#define GLM_ENABLE_EXPERIMENTAL // @
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp> // MVP 변환 행렬을 만들기 위해 사용합니다. glm/gtc/matrix_transform.hpp 헤더는 glm::rotate와 같은 모델 변환, glm::lookAt와 같은 보기 변환 및 glm::perspective와 같은 투영 변환을 생성하는 데 사용할 수 있는 함수를 노출합니다. GLM_FORCE_RADIANS 정의는 가능한 혼동을 피하기 위해 glm::rotate와 같은 함수가 라디안을 인수로 사용하도록 하는 데 필요합니다.
+#include <glm/gtx/hash.hpp> // @
 
 #define STB_IMAGE_IMPLEMENTATION // stb_image.h 헤더는 기본적으로 함수의 프로토타입만 정의합니다. 하나의 코드 파일에서 함수 본문을 한번만 포함하기 위해 STB_IMAGE_IMPLEMENTATION 정의가 있는 헤더를 포함해야 합니다. 그렇지 않으면 링킹 오류가 발생합니다.
 #include <stb_image.h> // 이미지를 로드하는 데 사용할 수 있는 라이브러리가 많이 있으며 BMP 및 PPM 과 같은 간단한 형식을 로드하는 고유한 코드를 작성할 수도 있습니다. 이 튜토리얼에서는 stb 컬렉션의 stb_image 라이브러리를 사용할 것입니다. 장점은 모든 코드가 단일 파일에 있으므로 까다로운 빌드 구성이 필요하지 않다는 것입니다. stb_image.h를 다운로드하여 포함 경로에 위치를 추가합니다.
+
+#define TINYOBJLOADER_IMPLEMENTATION // @
+#include <tiny_obj_loader.h> // @
 
 
 #include <iostream>         // 
@@ -23,6 +28,7 @@
 #include <array>            // 버텍스 배열 저장에 사용
 #include <optional>         // 그래픽카드가 해당 큐 패밀리를 지원하는지 여부 검사
 #include <set>              // 사용할 모든 큐 패밀리 셋을 모아서 관리
+#include <unordered_map>    // @
 
 // 디버그 관련
 #ifdef NDEBUG
@@ -37,6 +43,11 @@ constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검�
 // 초기 윈도우 해상도 설정
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
+
+// @
+const std::string MODEL_PATH = "models/viking_room.obj";
+const std::string TEXTURE_PATH = "textures/viking_room.png";
+
 
 // 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
 // CPU가 GPU보다 너무 앞서는 것을 원하지 않기 때문에 숫자 2를 선택합니다. 2개의 프레임이 비행 중이면 CPU와 GPU가 동시에 자체 작업을 수행할 수 있습니다. CPU가 일찍 끝나면 GPU가 렌더링을 마칠 때까지 기다렸다가 추가 작업을 제출합니다. 3개 이상의 프레임이 비행 중이면 CPU가 GPU보다 앞서서 지연 프레임이 추가될 수 있습니다. 일반적으로 추가 대기 시간은 바람직하지 않습니다. 그러나 비행 중인 프레임 수에 대한 애플리케이션 제어 권한을 부여하는 것은 Vulkan이 명시적임을 보여주는 또 다른 예입니다. 그런 다음 여러 커맨드 버퍼를 만들어야 합니다. createCommandBuffer의 이름을 createCommandBuffers로 바꿉니다. 다음으로 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 크기로 조정하고 VkCommandBufferAllocateInfo를 변경하여 많은 커맨드 버퍼를 포함한 다음 대상을 커맨드 버퍼의 벡터로 변경해야 합니다.
