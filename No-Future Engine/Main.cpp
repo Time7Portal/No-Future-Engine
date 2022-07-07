@@ -3,16 +3,16 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // GLM 에 의해 생성된 원근 투영 행렬은 기본적으로 -1.0 ~ +1.0 의 OpenGL 기본 깊이 범위를 사용합니다. GLM_FORCE_DEPTH_ZERO_TO_ONE 정의를 사용하여 0.0 ~ 1.0 의 Vulkan 범위를 사용하도록 해야 합니다.
-#define GLM_ENABLE_EXPERIMENTAL // @
+#define GLM_ENABLE_EXPERIMENTAL // #include <glm/gtx/hash.hpp> 사용을 위해 정의해야 합니다.
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp> // MVP 변환 행렬을 만들기 위해 사용합니다. glm/gtc/matrix_transform.hpp 헤더는 glm::rotate와 같은 모델 변환, glm::lookAt와 같은 보기 변환 및 glm::perspective와 같은 투영 변환을 생성하는 데 사용할 수 있는 함수를 노출합니다. GLM_FORCE_RADIANS 정의는 가능한 혼동을 피하기 위해 glm::rotate와 같은 함수가 라디안을 인수로 사용하도록 하는 데 필요합니다.
-#include <glm/gtx/hash.hpp> // @
+#include <glm/gtx/hash.hpp> // 해시 함수는 gtx 폴더에 정의되어 있습니다. 이는 기술적으로 아직 GLM에 대한 실험적 확장임을 의미합니다. 따라서 이를 사용하려면 GLM_ENABLE_EXPERIMENTAL을 정의해야 합니다. 이는 API가 향후 GLM의 새 버전에서 기능이 변경될 수 있음을 의미하지만 사실 지금 사용해도 이 API는 매우 안정적입니다. 이제 프로그램을 성공적으로 컴파일하고 실행할 수 있습니다.
 
 #define STB_IMAGE_IMPLEMENTATION // stb_image.h 헤더는 기본적으로 함수의 프로토타입만 정의합니다. 하나의 코드 파일에서 함수 본문을 한번만 포함하기 위해 STB_IMAGE_IMPLEMENTATION 정의가 있는 헤더를 포함해야 합니다. 그렇지 않으면 링킹 오류가 발생합니다.
 #include <stb_image.h> // 이미지를 로드하는 데 사용할 수 있는 라이브러리가 많이 있으며 BMP 및 PPM 과 같은 간단한 형식을 로드하는 고유한 코드를 작성할 수도 있습니다. 이 튜토리얼에서는 stb 컬렉션의 stb_image 라이브러리를 사용할 것입니다. 장점은 모든 코드가 단일 파일에 있으므로 까다로운 빌드 구성이 필요하지 않다는 것입니다. stb_image.h를 다운로드하여 포함 경로에 위치를 추가합니다.
 
-#define TINYOBJLOADER_IMPLEMENTATION // @
-#include <tiny_obj_loader.h> // @
+#define TINYOBJLOADER_IMPLEMENTATION // tinyobjloader 라이브러리는 STB 라이브러리와 동일한 방식으로 포함됩니다. tiny_obj_loader.h 파일을 포함하고 하나의 소스 파일에 TINYOBJLOADER_IMPLEMENTATION을 정의하여 함수 본문을 포함하고 링커 오류를 방지해야 합니다.
+#include <tiny_obj_loader.h> // OBJ 파일에서 꼭짓점과 면을 로드하기 위해 tinyobjloader 라이브러리를 사용합니다. stb_image와 비슷한 단일 헤더파일 라이브러리이기 때문에 빠르고 쉽게 통합할 수 있습니다. https://github.com/syoyo/tinyobjloader
 
 
 #include <iostream>         // 
@@ -28,7 +28,7 @@
 #include <array>            // 버텍스 배열 저장에 사용
 #include <optional>         // 그래픽카드가 해당 큐 패밀리를 지원하는지 여부 검사
 #include <set>              // 사용할 모든 큐 패밀리 셋을 모아서 관리
-#include <unordered_map>    // @
+#include <unordered_map>    // OBJ 파일 로드시 버텍스가 고유한지 판단하여 중복된 버텍스를 인덱싱하기 위해 사용
 
 // 디버그 관련
 #ifdef NDEBUG
@@ -44,7 +44,7 @@ constexpr bool enableValidationLayers = true; // 디버그 모드일때만 검�
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
-// @
+// 이 장에서는 아직 조명을 활성화하지 않을 것이므로 조명이 텍스처에 구워진 샘플 모델을 사용하는 것이 도움이 됩니다. 이러한 모델을 찾는 쉬운 방법은 Sketchfab에서 3D 스캔을 찾는 것입니다. 해당 사이트의 많은 모델은 허용 라이선스가 있는 OBJ 형식으로 사용할 수 있습니다. 이 튜토리얼에서는 nigelgoh(CC BY 4.0)의 바이킹 룸 모델을 사용하기로 결정했습니다. 원본 obj 파일에서 모델의 크기와 방향을 적절히 조정한 버전입니다. 자신의 모델을 자유롭게 사용할 수 있지만 약 1.5 x 1.5 x 1.5 단위의 치수이며 하나의 텍스쳐로만 구성되어 있어야 합니다. 그보다 크면 뷰 매트릭스를 변경해야 합니다. Shaders 폴더처럼 Models 폴더와 Textures 폴더를 각각 생성해서 파일을 정리해 넣었습니다.
 const std::string MODEL_PATH = "Models/viking_room.obj";
 const std::string TEXTURE_PATH = "Textures/viking_room.png";
 
@@ -184,14 +184,14 @@ struct Vertex
         return attributeDescriptions;
     }
 
-    // @
+    // 버텍스 두개가 동일한 위치, 색상, UV좌표를 가지고 있는지 검사하기 위한 연산자 오버로딩 함수 (OBJ 파일 로드시 버텍스가 고유한지 판단하여 중복된 버텍스를 인덱싱하기 위해 사용)
     bool operator==(const Vertex& other) const
     {
         return position == other.position && color == other.color && texCoord == other.texCoord;
     }
 };
 
-// @
+// 버텍스에 대한 해시 함수는 std::hash<T>에 대한 템플릿 특수화를 지정하여 구현됩니다. 해시 함수는 복잡한 주제이지만 https://en.cppreference.com/w/cpp/utility/hash 에서는 해시를 생성하기 위해 구조체의 필드를 결합하는 방식을 권장합니다. 이 코드는 Vertex 구조체 외부에 배치해야 합니다. GLM 유형에 대한 해시 함수는 다음 헤더를 사용하여 포함해야 합니다. #define GLM_ENABLE_EXPERIMENTAL, #include <glm/gtx/hash.hpp>
 namespace std
 {
     template<> struct hash<Vertex>
@@ -291,8 +291,8 @@ private:
     VkImageView textureImageView;                       // 텍스쳐 이미지 뷰 핸들
     VkSampler textureSampler;                           // 텍스쳐 샘플러 핸들
     
-    std::vector<Vertex> vertices;                       // @
-    std::vector<uint32_t> indices;                      // @
+    std::vector<Vertex> vertices;                       // 버텍스 배열. 이제 샘플 모델 파일에서 버텍스와 인덱스를 로드할 것입니다.
+    std::vector<uint32_t> indices;                      // 인덱스 배열. 65535보다 더 많은 정점이 있을 것이기 때문에 인덱스 유형을 uint16_t에서 uint32_t로 변경해야 합니다.
 
     VkBuffer vertexBuffer;                              // 버텍스 버퍼 핸들
     VkDeviceMemory vertexBufferMemory;                  // 버텍스 버퍼가 들어있는 실제 메모리의 핸들
@@ -406,21 +406,21 @@ private:
 
         createTextureSampler();         // 2-15. 텍스쳐를 샘플링 하기 위해 샘플러 객체를 생성합니다. (이 샘플러를 사용하여 셰이더의 텍스처에서 색상을 읽을 것입니다.)
 
-        loadModel();                    // @
+        loadModel();                    // 2-16. 테스트용 OBJ 파일의 버텍스를 로드합니다. (중복된 버텍스는 해시 함수를 이용해 버리고 인덱싱 하였습니다.)
 
-        createVertexBuffer();           // 2-16. 버텍스 버퍼 생성
+        createVertexBuffer();           // 2-17. 버텍스 버퍼 생성
 
-        createIndexBuffer();            // 2-17. 인덱스 버퍼 생성
+        createIndexBuffer();            // 2-18. 인덱스 버퍼 생성
 
-        createUniformBuffers();         // 2-18. 유니폼 버퍼 생성
+        createUniformBuffers();         // 2-19. 유니폼 버퍼 생성
 
-        createDescriptorPool();         // 2-19. 디스크립터 풀 생성
+        createDescriptorPool();         // 2-20. 디스크립터 풀 생성
 
-        createDescriptorSets();         // 2-20. 디스크립터 셋 생성
+        createDescriptorSets();         // 2-21. 디스크립터 셋 생성
 
-        createCommandBuffers();         // 2-21. 그래픽 카드로 보낼 커맨드 버퍼 생성
+        createCommandBuffers();         // 2-22. 그래픽 카드로 보낼 커맨드 버퍼 생성
 
-        createSyncObjects();            // 2-22. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+        createSyncObjects();            // 2-23. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     }
 
 
@@ -1582,43 +1582,6 @@ private:
 
 
 
-    // 2-12. 프레임 버퍼들을 생성
-    inline void createFramebuffers()
-    {
-        // 렌더 패스 생성 중에 지정된 어태치먼트는 VkFramebuffer 개체로 래핑하여 바인딩됩니다. 프레임 버퍼 개체는 어태치먼트를 나타내는 모든 VkImageView 개체를 참조합니다. 우리의 경우 그것은 단 하나일 것입니다: 색상 어태치먼트. 그러나 어태치먼트에 사용해야 하는 이미지는 프레젠테이션을 위해 스왑 체인이 반환하는 이미지에 따라 다릅니다. 때문에 스왑 체인에 들어있는 모든 이미지들에 대해 프레임 버퍼를 생성하고 드로잉 시 회수된 이미지에 해당하는 프레임 버퍼를 사용해야 합니다.
-        swapChainFramebuffers.resize(swapChainImageViews.size());
-
-        // 모든 스왑체인 이미지 뷰들에 대한 프레임 버퍼를 만듭니다.
-        for (size_t i = 0; i < swapChainImageViews.size(); i++)
-        {
-            // 다음 단계는 깊이 이미지를 깊이 어태치먼트에 바인딩하도록 프레임 버퍼 생성을 수정하는 것입니다. createFramebuffers로 이동하여 깊이 이미지 뷰를 두 번째 어태치먼트로 지정합니다.
-            std::array<VkImageView, 2> attachments = {
-                swapChainImageViews[i],
-                // 색상 어태치먼트는 스왑 체인 이미지마다 다르지만 모든 스왑 체인 이미지에서 동일한 깊이 이미지를 사용할 수 있습니다. 이유는 세마포어로 인해 오직 하나의 서브패스만 동시에 실행되기 때문입니다.
-                depthImageView
-            };
-
-            // 보시다시피 프레임 버퍼 생성은 매우 간단합니다. 먼저 어떤 렌더패스가 프레임 버퍼와 호환되는지 지정해야 합니다. 해당 렌더패스에 호환되는 프레임 버퍼만 사용할 수 있습니다.
-            VkFramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = renderPass;
-            // AttachmentCount 및 pAttachments 매개변수에 렌더 패스 pAttachment 배열의 각 어태치먼트 디스크립션에 바인딩되어야 하는 VkImageView 개체를 지정합니다.
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            // 너비 및 높이 매개변수는 스왑 체인 크기와 동일하게 하면 됩니다. 레이어는 이미지 배열의 레이어 수를 나타냅니다. 우리가 만든 스왑 체인 이미지는 단일 이미지이므로 레이어 수는 1입니다.
-            framebufferInfo.width = swapChainExtent.width;
-            framebufferInfo.height = swapChainExtent.height;
-            framebufferInfo.layers = 1;
-
-            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS)
-            {
-                throw std::runtime_error("Failed to create framebuffer!");
-            }
-        }
-    }
-
-
-
     // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성
     inline void createCommandPool()
     {
@@ -1659,7 +1622,7 @@ private:
         // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다.
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
         // 여기까지가 깊이 이미지를 만들기 위한 것입니다. 색상 어태치먼트처럼 렌더 패스의 시작 부분에서 갱신할 것이기 때문에 매핑하거나 다른 이미지를 복사할 필요가 없습니다.
-        
+
         // --- 사실 이 부분은 렌더 패스에서 처리할 것이기 때문에 이미지 레이아웃을 깊이 어태치먼트로 명시적으로 전환할 필요가 없습니다. 그러나 완전성을 위해 이 섹션에서 프로세스에 대해 계속 설명하겠습니다. 아래 코드는 원하시면 스킵하셔도 됩니다. (Optional)
         // 다음과 같이 createDepthResources 함수의 끝에서 transitionImageLayout을 호출합니다.
         transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -1713,6 +1676,43 @@ private:
 
 
 
+    // 2-12. 프레임 버퍼들을 생성
+    inline void createFramebuffers()
+    {
+        // 렌더 패스 생성 중에 지정된 어태치먼트는 VkFramebuffer 개체로 래핑하여 바인딩됩니다. 프레임 버퍼 개체는 어태치먼트를 나타내는 모든 VkImageView 개체를 참조합니다. 우리의 경우 그것은 단 하나일 것입니다: 색상 어태치먼트. 그러나 어태치먼트에 사용해야 하는 이미지는 프레젠테이션을 위해 스왑 체인이 반환하는 이미지에 따라 다릅니다. 때문에 스왑 체인에 들어있는 모든 이미지들에 대해 프레임 버퍼를 생성하고 드로잉 시 회수된 이미지에 해당하는 프레임 버퍼를 사용해야 합니다.
+        swapChainFramebuffers.resize(swapChainImageViews.size());
+
+        // 모든 스왑체인 이미지 뷰들에 대한 프레임 버퍼를 만듭니다.
+        for (size_t i = 0; i < swapChainImageViews.size(); i++)
+        {
+            // 다음 단계는 깊이 이미지를 깊이 어태치먼트에 바인딩하도록 프레임 버퍼 생성을 수정하는 것입니다. createFramebuffers로 이동하여 깊이 이미지 뷰를 두 번째 어태치먼트로 지정합니다.
+            std::array<VkImageView, 2> attachments = {
+                swapChainImageViews[i],
+                // 색상 어태치먼트는 스왑 체인 이미지마다 다르지만 모든 스왑 체인 이미지에서 동일한 깊이 이미지를 사용할 수 있습니다. 이유는 세마포어로 인해 오직 하나의 서브패스만 동시에 실행되기 때문입니다.
+                depthImageView
+            };
+
+            // 보시다시피 프레임 버퍼 생성은 매우 간단합니다. 먼저 어떤 렌더패스가 프레임 버퍼와 호환되는지 지정해야 합니다. 해당 렌더패스에 호환되는 프레임 버퍼만 사용할 수 있습니다.
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = renderPass;
+            // AttachmentCount 및 pAttachments 매개변수에 렌더 패스 pAttachment 배열의 각 어태치먼트 디스크립션에 바인딩되어야 하는 VkImageView 개체를 지정합니다.
+            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+            framebufferInfo.pAttachments = attachments.data();
+            // 너비 및 높이 매개변수는 스왑 체인 크기와 동일하게 하면 됩니다. 레이어는 이미지 배열의 레이어 수를 나타냅니다. 우리가 만든 스왑 체인 이미지는 단일 이미지이므로 레이어 수는 1입니다.
+            framebufferInfo.width = swapChainExtent.width;
+            framebufferInfo.height = swapChainExtent.height;
+            framebufferInfo.layers = 1;
+
+            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("Failed to create framebuffer!");
+            }
+        }
+    }
+
+
+
     // 2-13. 이미지(텍스쳐) 파일 로드
     void createTextureImage()
     {
@@ -1734,6 +1734,7 @@ private:
 
         // 이 라이브러리로 이미지를 로드하는 것은 정말 쉽습니다. stbi_load 함수는 파일 경로와 로드할 채널 수를 인자로 받습니다. STBI_rgb_alpha 값은 알파 채널이 없는 경우에도 이미지를 강제로 로드하므로 향후 여러 텍스처를 일관성있게 로드하기 좋습니다. 가운데 세 개의 매개변수는 이미지의 너비, 높이 및 실제 채널 수에 대한 출력입니다. 반환되는 포인터는 픽셀 값 배열의 첫 번째 요소입니다. STBI_rgb_alpha의 경우 픽셀당 4바이트로 픽셀 갯수는 총 texWidth * texHeight * 4(rgba) 입니다.
         int texWidth, texHeight, texChannels;
+        // 새로운 테스트 이미지를 사용하도록 파일 경로를 TEXTURE_PATH.c_str() 로 지정하였습니다.
         stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
@@ -1775,7 +1776,7 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    // 이미지 개체를 생성해주는 헬퍼 함수
+    // 이미지 개체를 생성해주는 헬퍼함수
     HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
         // 버퍼의 픽셀 값에 하나하나 액세스하도록 셰이더를 설정할 수도 있지만 이 목적을 위해 Vulkan 에선 이미지 개체를 사용하는 것이 좋습니다. 이미지 개체를 사용하면 2D 좌표를 사용할 수 있으므로 색상을 더 쉽고 빠르게 검색할 수 있습니다. 이미지 객체 내의 픽셀은 텍셀로 알려져 있으며 지금부터 그 이름을 사용합니다. 다음 새 클래스 구성원을 추가합니다. 이미지에 대한 매개변수는 VkImageCreateInfo 구조체에 지정됩니다.
@@ -1831,7 +1832,7 @@ private:
         vkBindImageMemory(device, image, imageMemory, 0);
     }
 
-    // 이미지 레이아웃 전환(트랜지션)을 구성하는 함수
+    // 이미지 레이아웃 전환(트랜지션)을 구성하는 헬퍼함수
     HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
     {
         // 이제 우리가 작성할 함수는 명령 버퍼를 다시 기록하고 실행하는 것과 관련이 있으므로 이제 해당 로직을 헬퍼 함수 한두개에 옮기기에 좋은 시간입니다. 여전히 버퍼를 사용하고 있었다면 이제 vkCmdCopyBufferToImage를 기록하고 실행하여 작업을 완료하는 함수를 작성할 수 있지만 이 명령을 사용하려면 먼저 이미지가 올바른 레이아웃에 있어야 합니다. 레이아웃 전환을 처리하는 새 함수를 만듭니다.
@@ -1918,7 +1919,7 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
-    // 버퍼를 받아 이미지 형태로 복사하는 함수
+    // 버퍼를 받아 이미지 형태로 복사하는 헬퍼함수
     HELPER_FUNCTION void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
     {
         // createTextureImage로 돌아가기 전에 도우미 함수 copyBufferToImage를 하나 더 작성합니다. 버퍼 복사와 마찬가지로 버퍼의 어느 부분을 이미지의 어느 부분으로 복사할지 지정해야 합니다. 이것은 VkBufferImageCopy 구조체를 통해 설정합니다.
@@ -2008,14 +2009,16 @@ private:
 
 
 
-    // @
+    // 2-16. 테스트용 OBJ 파일의 버텍스를 로드합니다.
     void loadModel()
     {
+        // 이제 이 라이브러리를 사용하여 정점 및 인덱스 컨테이너를 메쉬의 정점 데이터로 채우는 loadModel 함수를 작성할 것입니다. 버텍스 및 인덱스 버퍼가 생성되기 전에 이 함수가 호출되어야 합니다.
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
         std::vector<tinyobj::material_t> materials;
         std::string warn, err;
 
+        // 모델은 tinyobj::LoadObj 함수를 호출하여 라이브러리의 데이터 구조로 로드됩니다. OBJ 파일은 위치, 법선, 텍스처 좌표 및 면으로 구성됩니다. 면은 임의의 양의 정점으로 구성되며 각 정점은 인덱스로 위치, 법선 및/또는 텍스처 좌표를 나타냅니다. 이를 통해 전체 정점뿐만 아니라 개별 속성도 재사용할 수 있습니다. attrib 컨테이너는 attrib.vertices, attrib.normals 및 attrib.texcoords 벡터의 모든 위치, 법선 및 텍스처 좌표를 보유합니다.모양 컨테이너에는 모든 개별 개체와 해당 면이 포함됩니다. 각 면은 정점 배열로 구성되며 각 정점에는 위치, 법선 및 텍스처 좌표 속성의 인덱스가 포함됩니다. OBJ 모델은 면별로 재질과 질감을 정의할 수도 있지만 무시하겠습니다. err 문자열은 오류를 포함하고 warn 문자열은 누락된 재료 정의와 같이 파일을 로드하는 동안 발생한 경고를 포함합니다. LoadObj 함수가 false를 반환하는 경우 로드에 실패했다는 의미입니다. 위에서 언급했듯이 OBJ 파일의 면은 실제로 임의의 수의 정점을 포함할 수 있지만 우리 애플리케이션은 삼각형만 렌더링할 수 있습니다. 운 좋게도 LoadObj에는 기본적으로 활성화되어 있는 이러한 면을 자동으로 모두 삼각형으로 만들어주는 선택적 매개변수 triangulation 가 있습니다.
         if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
         {
             throw std::runtime_error(warn + err);
@@ -2023,25 +2026,30 @@ private:
 
         std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
+        // 파일의 모든 면을 단일 모델로 결합할 것이므로 모든 모양을 순회합니다.
         for (const auto& shape : shapes)
         {
             for (const auto& index : shape.mesh.indices)
             {
                 Vertex vertex{};
 
+                // triangulation 기능으로 이미 면당 3개의 정점만 존재한다는 것이 보장되므로 이제 정점을 직접 순회하며 정점 벡터에 직접 덤프할 수 있습니다. 단순화를 위해 모든 정점이 고유하다고 가정하므로 간단히 인덱스를 증가시켰습니다. 인덱스 변수는 vertex_index, normal_index 및 texcoord_index 멤버를 포함하는 tinyobj::index_t 유형입니다. attrib 배열에서 실제 꼭짓점 속성을 조회하려면 다음 인덱스를 사용해야 합니다. 불행히도 attrib.vertices 배열은 glm::vec3과 같이 버텍스로 묶인 배열이 아니라 그냥 모든 요소가 쭉 나열된 float 값의 배열이므로 인덱스에 3(x,y,z)을 곱해야 실제 버텍스별로 접근이 가능합니다.
                 vertex.position = {
                     attrib.vertices[3 * index.vertex_index + 0],
                     attrib.vertices[3 * index.vertex_index + 1],
                     attrib.vertices[3 * index.vertex_index + 2]
                 };
 
+                // 마찬가지로 attrib.texcoords 배열에는 두 개의 텍스처 좌표 구성 요소(U,V)씩 나열되어 있으므로 2를 곱해 접근하였습니다.
                 vertex.texCoord = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
+                    // OBJ 형식은 수직 좌표가 0 이면 이미지의 하단을 의미하는 좌표계를 가지지만 Vulkan 에서 0 은 이미지의 상단을 의미하므로 이미지를 위에서 아래 방향으로 업로드했습니다. 텍스처 좌표의 수직 구성요소를 뒤집어서 이 문제를 해결하였습니다.
                     1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
                 };
 
                 vertex.color = { 1.0f, 1.0f, 1.0f };
 
+                // 불행히도 아직 인덱스 버퍼를 제대로 활용하지 못하고 있습니다. 정점 벡터에는 많은 정점이 여러 삼각형에 포함되어 있기 때문에 중복된 정점 데이터가 많이 포함되어 있습니다. 고유한 정점만 유지하고 인덱스 버퍼를 사용하여 정점이 나타날 때마다 재사용해야 합니다. 이것을 구현하는 간단한 방법은 map 또는 unordered_map을 사용하여 고유한 정점과 각 인덱스를 추적하는 것입니다. OBJ 파일에서 정점을 읽을 때마다 이전에 정확히 동일한 위치와 텍스처 좌표를 가진 정점을 이미 본 적이 있는지 확인합니다. 그렇지 않은 경우 정점에 추가하고 해당 인덱스를 uniqueVertices 컨테이너에 저장합니다. 그 후 새로운 정점의 인덱스를 인덱스에 추가합니다. 이전에 똑같은 꼭짓점을 본 적이 있다면 uniqueVertices에서 해당 인덱스를 조회하고 해당 인덱스를 인덱스에 저장합니다. 꼭짓점의 크기를 확인하면 1,500,000 에서 265,645 개로 축소된 것을 알 수 있습니다! 이는 각 정점이 평균 ~6개 의 삼각형에서 재사용됨을 의미합니다. 이것은 확실히 GPU 메모리를 많이 절약합니다.
                 if (uniqueVertices.count(vertex) == 0)
                 {
                     uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
@@ -2051,18 +2059,20 @@ private:
                 indices.push_back(uniqueVertices[vertex]);
             }
         }
+
+        // 최적화가 활성화된 상태에서 지금 프로그램을 실행하십시오(예: Visual Studio의 릴리스 모드 및 GCC용 -O3 컴파일러 플래그). 그렇지 않으면 모델을 로드하는 속도가 매우 느려지기 때문에 이것이 필요합니다.
     }
 
 
 
-    // 2-16. 버텍스 버퍼 생성
+    // 2-17. 버텍스 버퍼 생성
     // Vulkan의 버퍼는 그래픽 카드에서 읽을 수 있는 임의의 데이터를 저장하는 데 사용되는 메모리 영역입니다. 그것들은 버텍스 데이터를 저장하는 데 사용할 수 있으며, 물론 다른 많은 목적으로도 사용할 수 있습니다. 지금까지 다루었던 Vulkan 객체들과 달리 버퍼는 자동으로 메모리를 할당하지 않습니다. Vulkan API는 프로그래머가 거의 모든 것을 제어할 수 있도록 던져주며 메모리 관리는 그 중에 하나입니다.
     inline void createVertexBuffer()
     {
         // 버퍼의 크기를 바이트 단위로 지정하는 크기입니다. 버텍스 데이터의 바이트 크기를 계산하는 것은 sizeof를 사용하면 간단합니다.
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-        // 2-12-1.
+        // 2-17-1.
         // 버텍스 버퍼만 사용해도 올바르게 작동하지만 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT 플래그가 있어 CPU 에서 액세스할 수 있는 메모리 유형은 그래픽 카드 자체에서 사용할 수 있는 최적의 메모리는 아닐 수 있습니다. 그래픽카드가 접근하기 가장 빠른 메모리에는 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT 플래그가 있으며 일반적으로 외장 그래픽카드의 경우 CPU 에서 액세스할 수 없는 메모리입니다. 이 장에서는 두 개의 버텍스 버퍼를 만들 것입니다. 하나는 CPU 에서 엑세스 가능하며 디바이스 메모리(VRAM)에 업로드를 위한 스테이징 버퍼와 두번째는 최종적으로 GPU 의 VRAM 에 할당되는 실제 버텍스 버퍼입니다. 그런 다음 버퍼 복사 명령을 사용하여 스테이징 버퍼에서 실제 버텍스 버퍼로 데이터를 이동합니다.
         // 이제 버텍스 데이터를 매핑하고 복사하기 위해 새로운 stagingBufferMemory 와 함께 stagingBuffer 를 사용하고 있습니다.
         // 여기서 우리는 두 개의 새로운 버퍼 사용방식 플래그를 설정할 것입니다.
@@ -2074,7 +2084,7 @@ private:
         // vertexBuffer는 이제 장치 로컬인 메모리 유형에서 할당됩니다. 이는 일반적으로 vkMapMemory를 사용할 수 없음을 의미합니다. 그러나 stagingBuffer에서는 vertexBuffer로 데이터를 복사할 수 있습니다. 버텍스 버퍼 사용 플래그와 함께 stagingBuffer에 대한 전송 소스 플래그와 vertexBuffer에 대한 전송 대상(목적지) 플래그를 지정하여 그렇게 할 것임을 나타내야 합니다.
 
 
-        // 2-12-2.
+        // 2-17-2.
         // 이제 버텍스 데이터를 버퍼에 복사할 차례입니다. 이것은 vkMapMemory를 사용하여 버퍼 메모리를 CPU 액세스 가능한 메모리에 매핑하여 수행됩니다. 이 함수를 사용하면 오프셋과 크기로 정의된 지정된 메모리 리소스 영역에 액세스할 수 있습니다. 여기서 오프셋과 크기는 각각 0과 bufferInfo.size입니다. 모든 메모리를 매핑하기 위해 특수 값 VK_WHOLE_SIZE를 지정할 수도 있습니다. 마지막에서 두 번째 매개변수는 플래그를 지정하는 데 사용할 수 있지만 현재 API에서는 아직 사용할 수 없습니다. 값을 0으로 설정해야 합니다. 마지막 매개변수는 매핑된 메모리에 대한 포인터의 출력을 지정합니다.
         void* data;
         vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
@@ -2091,7 +2101,7 @@ private:
         createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 
 
-        // 2-12-3.
+        // 2-17-3.
         // 이제 copyBuffer라고 하는 한 버퍼에서 다른 버퍼로 내용을 복사하는 함수를 작성할 것입니다.
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
@@ -2104,7 +2114,7 @@ private:
 
 
 
-    // 2-17. 인덱스 버퍼 생성
+    // 2-18. 인덱스 버퍼 생성
     // createIndexBuffer 함수는 createVertexBuffer와 거의 동일합니다.
     void createIndexBuffer()
     {
@@ -2130,7 +2140,7 @@ private:
 
 
 
-    // 2-18. 유니폼 버퍼 생성
+    // 2-19. 유니폼 버퍼 생성
     inline void createUniformBuffers()
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -2145,7 +2155,7 @@ private:
 
 
 
-    // 2-19. 디스크립터 풀 생성
+    // 2-20. 디스크립터 풀 생성
     inline void createDescriptorPool()
     {
         // 이전 장에 다룬 디스크립터 레이아웃은 바인딩할 수 있는 디스크립터의 유형을 설명합니다. 이 장에서 우리는 각각의 VkBuffer 자원에 대한 디스크립터 세트를 생성하여 이를 유니폼 버퍼 디스크립터에 바인딩할 것입니다. 디스크립터 세트는 직접 만들 수 없으며 명령 버퍼를 처리할때와 비슷하게 풀을 먼저 만들어 할당해야 합니다. 디스크립터 집합에 해당하는 것을 당연히 디스크립터 풀이라고 합니다. 우리는 그것을 설정하기 위해 새로운 함수 createDescriptorPool을 작성할 것입니다.
@@ -2176,7 +2186,7 @@ private:
 
 
 
-    // 2-120. 디스크립터 셋 생성
+    // 2-21. 디스크립터 셋 생성
     inline void createDescriptorSets()
     {
         // 이제 디스크립터 세트 자체를 할당할 수 있습니다. 그 목적을 위해 createDescriptorSets 함수를 추가하였습니다. 디스크립터 세트 할당은 VkDescriptorSetAllocateInfo 구조체로 설명됩니다. 할당할 디스크립터 풀, 할당할 디스크립터 세트 수 및 기반으로 할 디스크립터 레이아웃을 지정해야 합니다. 우리의 경우 비행 중인 각 프레임에 대해 단 하나의 디스크립터 세트를 만들고 모두 동일한 레이아웃을 사용합니다. 불행히도 vkAllocateDescriptorSets 함수가 세트 수와 일치하는 배열 크기의 데이터를 기대하기 때문에 레이아웃의 모든 복사본이 들어가야 합니다.
@@ -2366,7 +2376,7 @@ private:
 
 
 
-    // 2-21. 그래픽 카드로 보낼 커맨드 버퍼 생성
+    // 2-22. 그래픽 카드로 보낼 커맨드 버퍼 생성
     inline void createCommandBuffers()
     {
         // 각각의 프레임 마다 커맨드 버퍼가 존재해야 하므로, 커맨드 버퍼 벡터의 크기를 MAX_FRAMES_IN_FLIGHT 만큼으로 조정합니다.
@@ -2394,7 +2404,7 @@ private:
 
 
 
-    // 2-22. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
+    // 2-23. CPU 와 GPU 흐름을 동기화 시키기 위한 개체 생성
     inline void createSyncObjects()
     {
         // 대기 없이 미리 CPU 에서 처리 가능한 프레임 수 설정
@@ -2686,7 +2696,7 @@ private:
 
 
         // 인덱스 버퍼를 활용하여 그립니다.
-        // 그리기에 인덱스 버퍼를 사용하면 recordCommandBuffer에 두 가지 변경 사항이 포함됩니다. 버텍스 버퍼에 대해 했던 것처럼 먼저 인덱스 버퍼를 바인딩해야 합니다. 차이점은 하나의 인덱스 버퍼만 가질 수 있다는 것입니다. 불행히도 각 버텍스의 세부 속성 활용을 위해 다른 인덱스를 사용할 수는 없으므로 하나의 속성만 달라지더라도 꼭짓점 데이터를 완전히 복제해 새로 구성해야 합니다. 인덱스 버퍼는 인덱스 버퍼, 바이트 오프셋 및 인덱스 데이터 유형을 매개 변수로 포함하는 vkCmdBindIndexBuffer로 바인딩됩니다. 앞에서 언급했듯이 가능한 유형은 VK_INDEX_TYPE_UINT16 및 VK_INDEX_TYPE_UINT32입니다. 인덱스 버퍼를 바인딩하는 것만으로는 아직 아무 것도 변경되지 않습니다. 또한 Vulkan이 인덱스 버퍼를 사용하도록 지시하기 위해 그리기 명령을 변경해야 합니다. vkCmdDraw 줄을 제거하고 vkCmdDrawIndexed로 바꿉니다. 이 함수에 대한 호출은 vkCmdDraw와 매우 유사합니다. 처음 두 매개변수는 인덱스 수와 인스턴스 수를 지정합니다. 우리는 인스턴싱을 사용하지 않으므로 단지 1개의 인스턴스를 지정하였습니다. 인덱스 수는 버텍스 버퍼에 전달될 버텍스의 수를 나타냅니다. 다음 매개변수는 인덱스 버퍼에 대한 오프셋을 지정하며 값 1을 사용하면 그래픽 카드가 두 번째 인덱스에서 읽기 시작합니다. 마지막에서 두 번째 매개변수는 인덱스 버퍼의 인덱스에 추가할 오프셋을 지정합니다. 마지막 매개변수는 우리가 사용하지 않는 인스턴싱을 위한 오프셋을 지정합니다. 이제 프로그램을 실행하면 직사각형이 표시됩니다.
+        // 그리기에 인덱스 버퍼를 사용하면 recordCommandBuffer에 두 가지 변경 사항이 포함됩니다. 버텍스 버퍼에 대해 했던 것처럼 먼저 인덱스 버퍼를 바인딩해야 합니다. 차이점은 하나의 인덱스 버퍼만 가질 수 있다는 것입니다. 불행히도 각 버텍스의 세부 속성 활용을 위해 다른 인덱스를 사용할 수는 없으므로 하나의 속성만 달라지더라도 꼭짓점 데이터를 완전히 복제해 새로 구성해야 합니다. 인덱스 버퍼는 인덱스 버퍼, 바이트 오프셋 및 인덱스 데이터 유형을 매개 변수로 포함하는 vkCmdBindIndexBuffer로 바인딩됩니다. 앞에서 언급했듯이 가능한 유형은 VK_INDEX_TYPE_UINT16 및 VK_INDEX_TYPE_UINT32입니다. 인덱스 버퍼를 바인딩하는 것만으로는 아직 아무 것도 변경되지 않습니다. 또한 Vulkan이 인덱스 버퍼를 사용하도록 지시하기 위해 그리기 명령을 변경해야 합니다. vkCmdDraw 줄을 제거하고 vkCmdDrawIndexed로 바꿉니다. 이 함수에 대한 호출은 vkCmdDraw와 매우 유사합니다. 처음 두 매개변수는 인덱스 수와 인스턴스 수를 지정합니다. 우리는 인스턴싱을 사용하지 않으므로 단지 1개의 인스턴스를 지정하였습니다. 인덱스 수는 버텍스 버퍼에 전달될 버텍스의 수를 나타냅니다. 다음 매개변수는 인덱스 버퍼에 대한 오프셋을 지정하며 값 1을 사용하면 그래픽 카드가 두 번째 인덱스에서 읽기 시작합니다. 마지막에서 두 번째 매개변수는 인덱스 버퍼의 인덱스에 추가할 오프셋을 지정합니다. 마지막 매개변수는 우리가 사용하지 않는 인스턴싱을 위한 오프셋을 지정합니다. 이제 프로그램을 실행하면 직사각형이 표시됩니다. 65535보다 더 많은 정점이 있을 것이기 때문에 인덱스 유형을 uint16_t에서 uint32_t로 변경해야 합니다.
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 
