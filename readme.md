@@ -100,6 +100,13 @@ STB 이미지 로딩을 위한 라이브러리 추가 및 텍스쳐 로딩을 �
 
 뎁스 버퍼를 구성하고 뎁스 테스팅을 통해 렌더링시 카메라에 가까운 프레그먼트가 먼 프레그먼트를 가리도록 하였습니다.
 
+### 2022-07-08
+
+tiny_obj_loader 라이브러리를 이용한 OBJ 로딩과 중복 버텍스를 해싱을 통해 제거하고 인덱싱 하였습니다.
+
+결과물.png
+![initial](https://user-images.githubusercontent.com/17117191/177825645-1fdb227b-0cad-4b19-a223-ccbf09cf56fc.png)
+
 
 
 # References | 참고자료
