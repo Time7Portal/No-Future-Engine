@@ -104,7 +104,7 @@ STB 이미지 로딩을 위한 라이브러리 추가 및 텍스쳐 로딩을 �
 
 tiny_obj_loader 라이브러리를 이용한 OBJ 로딩과 중복 버텍스를 해싱을 통해 제거하고 인덱싱 하였습니다.
 
-결과물.png
+결과
 ![initial](https://user-images.githubusercontent.com/17117191/177825645-1fdb227b-0cad-4b19-a223-ccbf09cf56fc.png)
 
 
