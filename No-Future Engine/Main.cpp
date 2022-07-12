@@ -286,6 +286,7 @@ private:
     VkDeviceMemory depthImageMemory;                    // 깊이 이미지 메모리 핸들
     VkImageView depthImageView;                         // 깊이 이미지 뷰 핸들
 
+    uint32_t mipLevels;                                 // ##
     VkImage textureImage;                               // 텍스쳐 이미지 핸들
     VkDeviceMemory textureImageMemory;                  // 텍스쳐 이미지 메모리 핸들
     VkImageView textureImageView;                       // 텍스쳐 이미지 뷰 핸들
@@ -1061,12 +1062,14 @@ private:
         for (uint32_t i = 0; i < swapChainImages.size(); i++)
         {
             // createImageViews 의 이미지 뷰를 생성하는 코드가 여러 곳에서도 비슷하게 사용되기 때문에 createImageView 함수로 분리하여 재사용 하였습니다.
-            swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+            // ##
+            swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
     // 이미지 뷰를 생성하는 헬퍼 함수
-    HELPER_FUNCTION VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
+    // ##
+    HELPER_FUNCTION VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels)
     {
         // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
         VkImageViewCreateInfo viewInfo{};
@@ -1083,7 +1086,8 @@ private:
         // subresourceRange는 이미지의 목적이 무엇이며 액세스해야 하는 이미지 부분을 설명합니다. 우리의 이미지는 밉매핑 레벨이나 다중 레이어 없이 색상 대상으로 사용됩니다.
         viewInfo.subresourceRange.aspectMask = aspectFlags; // 뷰에 포함되는 이미지의 양식을 정의 - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageAspectFlagBits.html
         viewInfo.subresourceRange.baseMipLevel = 0; // 밉맵 없음
-        viewInfo.subresourceRange.levelCount = 1; // 밉맵 계층 갯수
+        // ##
+        viewInfo.subresourceRange.levelCount = mipLevels; // 밉맵 계층 갯수
         // 스테레오그래픽 3D 응용 프로그램에서는 여러 레이어가 있는 스왑 체인을 만들 것입니다. 그런 다음 다른 레이어에 액세스하여 왼쪽 및 오른쪽 눈의 보기를 나타내는 각 이미지에 대해 여러 이미지 뷰를 만들 수 있습니다.
         viewInfo.subresourceRange.baseArrayLayer = 0; // 뷰에 보여질 첫번째 배열 레이어
         viewInfo.subresourceRange.layerCount = 1; // 배열 레이어 수
@@ -1618,14 +1622,17 @@ private:
         VkFormat depthFormat = findDepthFormat();
 
         // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다.
-        createImage(swapChainExtent.width, swapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        // ##
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
         // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다.
-        depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        // ##
+        depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         // 여기까지가 깊이 이미지를 만들기 위한 것입니다. 색상 어태치먼트처럼 렌더 패스의 시작 부분에서 갱신할 것이기 때문에 매핑하거나 다른 이미지를 복사할 필요가 없습니다.
 
         // --- 사실 이 부분은 렌더 패스에서 처리할 것이기 때문에 이미지 레이아웃을 깊이 어태치먼트로 명시적으로 전환할 필요가 없습니다. 그러나 완전성을 위해 이 섹션에서 프로세스에 대해 계속 설명하겠습니다. 아래 코드는 원하시면 스킵하셔도 됩니다. (Optional)
         // 다음과 같이 createDepthResources 함수의 끝에서 transitionImageLayout을 호출합니다.
-        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        // ## 이 단계에서는 mipLevels 가 아직 초기화 되지 않은 상태이므로 mipLevels = 0 이 반영되어 오류가 발생합니다. mipLevels 대신 숫자 1을 넣거나 이 코드는 불필요하므로 스킵해도 됩니다.
+        // transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, mipLevels);
         // --- (Optional)
     }
 
@@ -1737,6 +1744,8 @@ private:
         // 새로운 테스트 이미지를 사용하도록 파일 경로를 TEXTURE_PATH.c_str() 로 지정하였습니다.
         stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
+        // ##
+        mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
         if (!pixels)
         {
@@ -1759,25 +1768,32 @@ private:
         stbi_image_free(pixels);
 
         // 이 함수는 이미 상당히 커지고 있으며 이후 장에서 더 많은 이미지를 생성해야 할 필요가 있으므로 버퍼에서 했던 것처럼 이미지 생성을 createImage 함수로 추상화해야 합니다. 함수를 만들고 이미지 개체 생성 및 메모리 할당을 해당 함수로 이동합니다. 너비, 높이, 형식, 타일링 모드, 사용량 및 메모리 속성 매개변수를 만들었습니다. 이 매개변수는 이 튜토리얼 전체에서 만들 이미지마다 다를 수 있기 때문입니다.
-        createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
+        // ##
+        createImage(texWidth, texHeight, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
         // 이제 텍스처 이미지 설정을 완료하는 데 필요한 모든 도구가 있으므로 createTextureImage 함수로 돌아갑니다. 우리가 거기서 마지막으로 한 것은 텍스처 이미지를 만드는 것이었습니다. 다음 단계는 스테이징 버퍼를 텍스처 이미지에 복사하는 것입니다. 여기에는 두 단계가 포함됩니다.
         // 1. 텍스처 이미지를 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL로 전환
         // 2. 버퍼에서 이미지 복사 작업 실행
         // 이것은 방금 만든 transitionImageLayout 함수로 쉽게 수행할 수 있습니다.
         // 이미지는 VK_IMAGE_LAYOUT_UNDEFINED 레이아웃으로 생성되었으므로 textureImage를 전환할 때 이전 레이아웃을 지정해야 합니다. 복사 작업을 수행하기 전에 그 컨텐츠에 대해 신경 쓰지 않아도 되기 때문에 이렇게 작업을 수행할 수 있음을 기억하십시오.
-        transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        // ##
+        transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
         copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
         // 셰이더의 텍스처 이미지에서 샘플링을 시작하려면 셰이더 액세스를 준비하기 위해 마지막 트랜지션이 하나 필요합니다.
-        transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
+        // ## transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
+        //transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        
         // 마지막에 스테이징 버퍼와 메모리를 정리하여 createTextureImage 함수를 종료합니다.
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+        // ##
+        generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
     }
 
     // 이미지 개체를 생성해주는 헬퍼함수
-    HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+    // ##
+    HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
         // 버퍼의 픽셀 값에 하나하나 액세스하도록 셰이더를 설정할 수도 있지만 이 목적을 위해 Vulkan 에선 이미지 개체를 사용하는 것이 좋습니다. 이미지 개체를 사용하면 2D 좌표를 사용할 수 있으므로 색상을 더 쉽고 빠르게 검색할 수 있습니다. 이미지 객체 내의 픽셀은 텍셀로 알려져 있으며 지금부터 그 이름을 사용합니다. 다음 새 클래스 구성원을 추가합니다. 이미지에 대한 매개변수는 VkImageCreateInfo 구조체에 지정됩니다.
         VkImageCreateInfo imageInfo{};
@@ -1787,7 +1803,8 @@ private:
         imageInfo.extent.width = width;
         imageInfo.extent.height = height;
         imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
+        // ##
+        imageInfo.mipLevels = mipLevels;
         imageInfo.arrayLayers = 1;
         // Vulkan은 가능한 많은 이미지 형식을 지원하지만 텍셀에 대해 버퍼의 픽셀과 동일한 형식을 사용해야 합니다. 그렇지 않으면 복사 작업이 실패합니다.
         imageInfo.format = format;
@@ -1833,7 +1850,7 @@ private:
     }
 
     // 이미지 레이아웃 전환(트랜지션)을 구성하는 헬퍼함수
-    HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+    HELPER_FUNCTION void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
     {
         // 이제 우리가 작성할 함수는 명령 버퍼를 다시 기록하고 실행하는 것과 관련이 있으므로 이제 해당 로직을 헬퍼 함수 한두개에 옮기기에 좋은 시간입니다. 여전히 버퍼를 사용하고 있었다면 이제 vkCmdCopyBufferToImage를 기록하고 실행하여 작업을 완료하는 함수를 작성할 수 있지만 이 명령을 사용하려면 먼저 이미지가 올바른 레이아웃에 있어야 합니다. 레이아웃 전환을 처리하는 새 함수를 만듭니다.
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
@@ -1864,7 +1881,7 @@ private:
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         }
         barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
@@ -1949,13 +1966,105 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
+    // ##
+    HELPER_FUNCTION void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
+    {
+        // Check if image format supports linear blitting
+        VkFormatProperties formatProperties;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
+
+        if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+        {
+            throw std::runtime_error("Texture image format does not support linear blitting!");
+        }
+
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.image = image;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.levelCount = 1;
+
+        int32_t mipWidth = texWidth;
+        int32_t mipHeight = texHeight;
+
+        for (uint32_t i = 1; i < mipLevels; i++)
+        {
+            barrier.subresourceRange.baseMipLevel = i - 1;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            vkCmdPipelineBarrier(commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier);
+
+            VkImageBlit blit{};
+            blit.srcOffsets[0] = { 0, 0, 0 };
+            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.mipLevel = i - 1;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = 1;
+            blit.dstOffsets[0] = { 0, 0, 0 };
+            blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1 };
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.mipLevel = i;
+            blit.dstSubresource.baseArrayLayer = 0;
+            blit.dstSubresource.layerCount = 1;
+
+            vkCmdBlitImage(commandBuffer,
+                image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &blit,
+                VK_FILTER_LINEAR);
+
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier);
+
+            if (mipWidth > 1) mipWidth /= 2;
+            if (mipHeight > 1) mipHeight /= 2;
+        }
+
+        barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            0, nullptr,
+            0, nullptr,
+            1, &barrier);
+
+        endSingleTimeCommands(commandBuffer);
+    }
+
 
 
     // 2-14. 셰이더가 텍스쳐에서 텍셀을 읽어들이는 방식인 이미지 뷰 생성
     inline void createTextureImageView()
     {
         // 이 장에서는 그래픽 파이프라인이 이미지를 샘플링하는 데 필요한 리소스를 두 개 더 만들 것입니다. 첫 번째 리소스는 이전에 스왑 체인 이미지에서 이미 본 것이지만 두 번째 리소스는 새로운 것입니다. 이는 셰이더가 이미지에서 텍셀을 읽는 방법과 관련이 있습니다. 이전에 스왑 체인 이미지와 프레임 버퍼를 사용하여 이미지에 직접 액세스하지 않고 이미지 뷰를 통해 액세스하는 것을 보았습니다. 또한 텍스처 이미지에 대해 이러한 이미지 뷰를 생성해야 합니다. 텍스처 이미지에 대한 VkImageView를 보유할 클래스 멤버 textureImageView를 추가하고 이를 생성할 새 함수 createTextureImageView를 만듭니다.
-        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        // ##
+        textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
     }
 
 
@@ -1996,9 +2105,10 @@ private:
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         // 이 모든 필드는 밉매핑에 적용됩니다. 다음 장에서 밉매핑에 대해 살펴보겠지만 기본적으로 적용할 수 있는 또 다른 유형의 필터입니다. 이제 샘플러의 기능이 완전히 정의되었습니다. 샘플러 개체의 핸들을 보유할 클래스 멤버를 추가하고 vkCreateSampler를 사용하여 샘플러를 생성합니다.
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.mipLodBias = 0.0f; // Optional
-        samplerInfo.minLod = 0.0f; // Optional
-        samplerInfo.maxLod = 0.0f; // Optional
+        // ##
+        samplerInfo.minLod = 0.0f; // optional
+        samplerInfo.maxLod = static_cast<float>(mipLevels); // optional
+        samplerInfo.mipLodBias = 0.0f; // optional
 
         // 샘플러는 어디에서도 VkImage를 참조하지 않습니다. 샘플러는 텍스처에서 색상을 추출하는 인터페이스를 제공하는 별개의 개체입니다. 1D, 2D, 3D 등 원하는 모든 이미지에 적용할 수 있습니다. 이는 텍스처 이미지와 필터링을 단일 상태로 결합한 많은 이전 API와 다릅니다.
         if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
