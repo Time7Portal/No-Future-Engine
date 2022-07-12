@@ -2105,6 +2105,7 @@ private:
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         // 이 모든 필드는 밉매핑에 적용됩니다. 다음 장에서 밉매핑에 대해 살펴보겠지만 기본적으로 적용할 수 있는 또 다른 유형의 필터입니다. 이제 샘플러의 기능이 완전히 정의되었습니다. 샘플러 개체의 핸들을 보유할 클래스 멤버를 추가하고 vkCreateSampler를 사용하여 샘플러를 생성합니다.
+        // ## VK_SAMPLER_MIPMAP_MODE_NEAREST 로 하면 디테일이 어느정도 살아납니다.
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
         // ##
         samplerInfo.minLod = 0.0f; // optional
