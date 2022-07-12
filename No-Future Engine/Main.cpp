@@ -2021,7 +2021,7 @@ private:
         // 모델은 tinyobj::LoadObj 함수를 호출하여 라이브러리의 데이터 구조로 로드됩니다. OBJ 파일은 위치, 법선, 텍스처 좌표 및 면으로 구성됩니다. 면은 임의의 양의 정점으로 구성되며 각 정점은 인덱스로 위치, 법선 및/또는 텍스처 좌표를 나타냅니다. 이를 통해 전체 정점뿐만 아니라 개별 속성도 재사용할 수 있습니다. attrib 컨테이너는 attrib.vertices, attrib.normals 및 attrib.texcoords 벡터의 모든 위치, 법선 및 텍스처 좌표를 보유합니다.모양 컨테이너에는 모든 개별 개체와 해당 면이 포함됩니다. 각 면은 정점 배열로 구성되며 각 정점에는 위치, 법선 및 텍스처 좌표 속성의 인덱스가 포함됩니다. OBJ 모델은 면별로 재질과 질감을 정의할 수도 있지만 무시하겠습니다. err 문자열은 오류를 포함하고 warn 문자열은 누락된 재료 정의와 같이 파일을 로드하는 동안 발생한 경고를 포함합니다. LoadObj 함수가 false를 반환하는 경우 로드에 실패했다는 의미입니다. 위에서 언급했듯이 OBJ 파일의 면은 실제로 임의의 수의 정점을 포함할 수 있지만 우리 애플리케이션은 삼각형만 렌더링할 수 있습니다. 운 좋게도 LoadObj에는 기본적으로 활성화되어 있는 이러한 면을 자동으로 모두 삼각형으로 만들어주는 선택적 매개변수 triangulation 가 있습니다.
         if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
         {
-            throw std::runtime_error(warn + err);
+            throw std::runtime_error("\033[1;31m@ [ERROR] : Failed to load OBJ File : " + warn + err);
         }
 
         std::unordered_map<Vertex, uint32_t> uniqueVertices{};
