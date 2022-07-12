@@ -1746,6 +1746,7 @@ private:
         VkDeviceSize imageSize = texWidth * texHeight * 4;
         // ##
         mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+        //mipLevels = 1; // @@@@@@ 밉맵 끔
 
         if (!pixels)
         {
