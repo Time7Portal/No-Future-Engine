@@ -286,7 +286,7 @@ private:
     VkDeviceMemory depthImageMemory;                    // 깊이 이미지 메모리 핸들
     VkImageView depthImageView;                         // 깊이 이미지 뷰 핸들
 
-    uint32_t mipLevels;                                 // ##
+    uint32_t mipLevels;                                 // 밉맵 단계 수
     VkImage textureImage;                               // 텍스쳐 이미지 핸들
     VkDeviceMemory textureImageMemory;                  // 텍스쳐 이미지 메모리 핸들
     VkImageView textureImageView;                       // 텍스쳐 이미지 뷰 핸들
@@ -1970,6 +1970,8 @@ private:
     // ##
     HELPER_FUNCTION void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
     {
+        // 이제 프로그램에서 3D 모델을 로드하고 렌더링할 수 있습니다. 이 장에서는 Mipmap 생성이라는 기능을 하나 더 추가합니다. Mipmap은 게임 및 렌더링 소프트웨어에서 널리 사용되며 Vulkan은 Mipmap 생성 방법을 완벽하게 제어합니다. Mipmap은 미리 계산되고 축소된 이미지 버전입니다. 각각의 새 이미지는 이전 이미지의 너비와 높이의 절반입니다. 밉맵은 세부 수준 또는 LOD의 형태로 사용됩니다. 카메라에서 멀리 떨어진 개체는 더 작은 밉 이미지에서 텍스처를 샘플링합니다. 더 작은 이미지를 사용하면 렌더링 속도가 빨라지고 모아레 패턴과 같은 아티팩트가 방지됩니다.
+
         // Check if image format supports linear blitting
         VkFormatProperties formatProperties;
         vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
