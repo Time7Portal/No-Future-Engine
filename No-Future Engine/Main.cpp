@@ -2113,9 +2113,9 @@ private:
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         // 이 모든 필드는 밉매핑에 적용됩니다. 다음 장에서 밉매핑에 대해 살펴보겠지만 기본적으로 적용할 수 있는 또 다른 유형의 필터입니다. 이제 샘플러의 기능이 완전히 정의되었습니다. 샘플러 개체의 핸들을 보유할 클래스 멤버를 추가하고 vkCreateSampler를 사용하여 샘플러를 생성합니다.
-        // ## VK_SAMPLER_MIPMAP_MODE_NEAREST 로 하면 디테일이 어느정도 살아납니다.
+        // VK_SAMPLER_MIPMAP_MODE_NEAREST 로 하면 디테일이 어느정도 살아납니다. 밉맵 챕터의 결과를 보려면 textureSampler에 대한 값을 선택해야 합니다. VK_FILTER_LINEAR를 사용하도록 minFilter 및 magFilter를 이미 설정했습니다. minLod, maxLod, mipLodBias 및 mipmapMode 값을 선택하기만 하면 됩니다. 샘플러 설정을 가지고 놀면서 그들이 밉매핑에 어떤 영향을 미치는지 확인할 수 있습니다. 예를 들어 minLod를 변경하여 샘플러가 가장 낮은 밉 레벨을 사용하지 않도록 할 수 있습니다. 이 방법으로 물체가 카메라에서 더 멀리 떨어져 있을 때 더 높은 밉 레벨이 사용되는 것을 시뮬레이션 할 수 있습니다.
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        // ##
+        // VkImage가 밉맵 데이터를 보유하는 동안 VkSampler는 렌더링하는 동안 해당 데이터를 읽는 방법을 제어합니다. Vulkan을 사용하면 minLod, maxLod, mipLodBias 및 mipmapMode를 지정할 수 있습니다("Lod"는 "세부 수준"을 의미함). 텍스처가 샘플링되면 샘플러는 https://vulkan-tutorial.com/Generating_Mipmaps 에 나와있는 의사 코드처럼 밉 레벨을 선택합니다. samplerInfo.mipmapMode가 VK_SAMPLER_MIPMAP_MODE_NEAREST이면 lod는 샘플링할 밉 레벨을 선택합니다. 밉맵 모드가 VK_SAMPLER_MIPMAP_MODE_LINEAR인 경우 lod는 샘플링할 두 밉 수준을 선택하는 데 사용됩니다. 이러한 수준은 샘플링되고 결과는 선형으로 혼합됩니다. 샘플 작업은 lod의 영향도 받습니다. 물체가 카메라에 가까이 있으면 magFilter가 필터로 사용됩니다. 객체가 카메라에서 더 멀리 있으면 minFilter가 사용됩니다. 일반적으로 lod는 음수가 아니며 카메라를 닫을 때만 0입니다. mipLodBias를 사용하면 Vulkan이 일반적으로 사용하는 것보다 낮은 lod와 레벨을 사용하도록 강제할 수 있습니다. 전체 범위의 밉 수준을 사용할 수 있도록 minLod를 0.0f로 설정하고 maxLod를 밉 수준 수로 설정했습니다. lod 값을 변경할 이유가 없으므로 mipLodBias를 0.0f로 설정합니다.
         samplerInfo.minLod = 0.0f; // optional
         samplerInfo.maxLod = static_cast<float>(mipLevels); // optional
         samplerInfo.mipLodBias = 0.0f; // optional
