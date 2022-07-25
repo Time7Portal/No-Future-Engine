@@ -1777,7 +1777,6 @@ private:
         
         copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
         
-
         // 마지막에 스테이징 버퍼와 메모리를 정리하여 createTextureImage 함수를 종료합니다.
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
