@@ -286,7 +286,7 @@ private:
     VkDeviceMemory depthImageMemory;                    // 깊이 이미지 메모리 핸들
     VkImageView depthImageView;                         // 깊이 이미지 뷰 핸들
 
-    uint32_t mipLevels;                                 // 밉맵 단계 수
+    uint32_t mipLevels;                                 // 밉맵 단계 수. Vulkan에서 각 밉 이미지는 VkImage의 서로 다른 밉 레벨에 저장됩니다. 밉 레벨 0은 원본 이미지이고 레벨 0 이후의 밉 레벨은 일반적으로 밉 체인이라고 합니다. 밉 레벨의 수는 VkImage가 생성될 때 지정됩니다. 지금까지 우리는 항상 이 값을 1로 설정했습니다. 이미지의 차원에서 밉 레벨의 수를 계산해야 합니다.
     VkImage textureImage;                               // 텍스쳐 이미지 핸들
     VkDeviceMemory textureImageMemory;                  // 텍스쳐 이미지 메모리 핸들
     VkImageView textureImageView;                       // 텍스쳐 이미지 뷰 핸들
@@ -1062,13 +1062,11 @@ private:
         for (uint32_t i = 0; i < swapChainImages.size(); i++)
         {
             // createImageViews 의 이미지 뷰를 생성하는 코드가 여러 곳에서도 비슷하게 사용되기 때문에 createImageView 함수로 분리하여 재사용 하였습니다.
-            // ##
             swapChainImageViews[i] = createImageView(swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
     // 이미지 뷰를 생성하는 헬퍼 함수
-    // ##
     HELPER_FUNCTION VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels)
     {
         // 이미지 뷰 생성을 위한 속성값들은 VkImageViewCreateInfo 구조체로 설정합니다.
@@ -1086,7 +1084,7 @@ private:
         // subresourceRange는 이미지의 목적이 무엇이며 액세스해야 하는 이미지 부분을 설명합니다. 우리의 이미지는 밉매핑 레벨이나 다중 레이어 없이 색상 대상으로 사용됩니다.
         viewInfo.subresourceRange.aspectMask = aspectFlags; // 뷰에 포함되는 이미지의 양식을 정의 - https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkImageAspectFlagBits.html
         viewInfo.subresourceRange.baseMipLevel = 0; // 밉맵 없음
-        // ##
+        // 이미지 뷰에도 마찬가지로 밉맵 레벨 수를 설정해줍니다.
         viewInfo.subresourceRange.levelCount = mipLevels; // 밉맵 계층 갯수
         // 스테레오그래픽 3D 응용 프로그램에서는 여러 레이어가 있는 스왑 체인을 만들 것입니다. 그런 다음 다른 레이어에 액세스하여 왼쪽 및 오른쪽 눈의 보기를 나타내는 각 이미지에 대해 여러 이미지 뷰를 만들 수 있습니다.
         viewInfo.subresourceRange.baseArrayLayer = 0; // 뷰에 보여질 첫번째 배열 레이어
@@ -1621,11 +1619,9 @@ private:
         // 스텐실 구성 요소는 스텐실 테스트 https://en.wikipedia.org/wiki/Stencil_buffer 에 사용되며, 이는 깊이 테스트와 결합할 수 있는 추가 테스트입니다. 이에 대해서는 다음 장에서 살펴보겠습니다.
         VkFormat depthFormat = findDepthFormat();
 
-        // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다.
-        // ##
+        // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다.
         createImage(swapChainExtent.width, swapChainExtent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
-        // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다.
-        // ##
+        // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다.
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         // 여기까지가 깊이 이미지를 만들기 위한 것입니다. 색상 어태치먼트처럼 렌더 패스의 시작 부분에서 갱신할 것이기 때문에 매핑하거나 다른 이미지를 복사할 필요가 없습니다.
 
@@ -1744,7 +1740,7 @@ private:
         // 새로운 테스트 이미지를 사용하도록 파일 경로를 TEXTURE_PATH.c_str() 로 지정하였습니다.
         stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
-        // ##
+        // 밉 체인의 레벨 수를 계산합니다. max 함수는 가장 큰 차원을 선택합니다. log2 함수는 해당 차원을 2로 나눌 수 있는 횟수를 계산합니다. floor 함수는 가장 큰 차원이 2의 거듭제곱이 아닌 경우를 처리합니다. 원본 이미지가 밉 수준을 갖도록 1이 추가됩니다.
         mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
         //mipLevels = 1; // @@@@@@ 밉맵 끔
 
@@ -1768,32 +1764,29 @@ private:
         // stb 라이브러리에서 사용한 원래의 픽셀 배열을 정리하는 것을 잊지 마십시오.
         stbi_image_free(pixels);
 
-        // 이 함수는 이미 상당히 커지고 있으며 이후 장에서 더 많은 이미지를 생성해야 할 필요가 있으므로 버퍼에서 했던 것처럼 이미지 생성을 createImage 함수로 추상화해야 합니다. 함수를 만들고 이미지 개체 생성 및 메모리 할당을 해당 함수로 이동합니다. 너비, 높이, 형식, 타일링 모드, 사용량 및 메모리 속성 매개변수를 만들었습니다. 이 매개변수는 이 튜토리얼 전체에서 만들 이미지마다 다를 수 있기 때문입니다.
-        // ##
+        // 이 함수는 이미 상당히 커지고 있으며 이후 장에서 더 많은 이미지를 생성해야 할 필요가 있으므로 버퍼에서 했던 것처럼 이미지 생성을 createImage 함수로 추상화해야 합니다. 함수를 만들고 이미지 개체 생성 및 메모리 할당을 해당 함수로 이동합니다. 너비, 높이, 형식, 타일링 모드, 사용량 및 메모리 속성 매개변수를 만들었습니다. 이 매개변수는 이 튜토리얼 전체에서 만들 이미지마다 다를 수 있기 때문입니다. 밉 매핑에 사용할 vkCmdBlitImage는 전송 작업으로 간주되므로 Vulkan 에 텍스처 이미지를 전송의 소스 및 대상으로 사용할 것임을 알려야 합니다. createTextureImage의 텍스처 이미지 사용 플래그에 VK_IMAGE_USAGE_TRANSFER_SRC_BIT를 추가합니다. 다른 이미지 작업과 마찬가지로 vkCmdBlitImage는 작업하는 이미지의 레이아웃에 따라 다릅니다. 전체 이미지를 VK_IMAGE_LAYOUT_GENERAL로 전환할 수 있지만 이는 느릴 가능성이 큽니다. 최적의 성능을 위해 소스 이미지는 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL에 있어야 하고 대상 이미지는 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL에 있어야 합니다. Vulkan을 사용하면 이미지의 각 밉 레벨을 독립적으로 전환할 수 있습니다. 각 blit은 한 번에 두 개의 밉 레벨만 처리하므로 각 레벨을 blits 명령 간에 최적의 레이아웃으로 전환할 수 있습니다.
         createImage(texWidth, texHeight, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
-        // 이제 텍스처 이미지 설정을 완료하는 데 필요한 모든 도구가 있으므로 createTextureImage 함수로 돌아갑니다. 우리가 거기서 마지막으로 한 것은 텍스처 이미지를 만드는 것이었습니다. 다음 단계는 스테이징 버퍼를 텍스처 이미지에 복사하는 것입니다. 여기에는 두 단계가 포함됩니다.
+        // 이제 텍스쳐 이미지 설정을 완료하는 데 필요한 모든 도구가 있으므로 createTextureImage 함수로 돌아갑니다. 우리가 거기서 마지막으로 한 것은 텍스처 이미지를 만드는 것이었습니다. 다음 단계는 스테이징 버퍼를 텍스처 이미지에 복사하는 것입니다. 여기에는 두 단계가 포함됩니다.
         // 1. 텍스처 이미지를 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL로 전환
         // 2. 버퍼에서 이미지 복사 작업 실행
         // 이것은 방금 만든 transitionImageLayout 함수로 쉽게 수행할 수 있습니다.
-        // 이미지는 VK_IMAGE_LAYOUT_UNDEFINED 레이아웃으로 생성되었으므로 textureImage를 전환할 때 이전 레이아웃을 지정해야 합니다. 복사 작업을 수행하기 전에 그 컨텐츠에 대해 신경 쓰지 않아도 되기 때문에 이렇게 작업을 수행할 수 있음을 기억하십시오.
-        // ##
-        transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-        copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-        // 셰이더의 텍스처 이미지에서 샘플링을 시작하려면 셰이더 액세스를 준비하기 위해 마지막 트랜지션이 하나 필요합니다.
-        // ## transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL while generating mipmaps
+        // 셰이더의 텍스처 이미지에서 샘플링을 시작하려면 셰이더 액세스를 준비하기 위해 마지막 트랜지션이 하나 필요합니다. 이미지는 VK_IMAGE_LAYOUT_UNDEFINED 레이아웃으로 생성되었으므로 textureImage를 전환할 때 이전 레이아웃을 지정해야 합니다. 복사 작업을 수행하기 전에 그 컨텐츠에 대해 신경 쓰지 않아도 되기 때문에 이렇게 작업을 수행할 수 있음을 기억하십시오. transitionImageLayout은 전체 이미지에 대해서만 레이아웃 전환을 수행하므로 몇 가지 파이프라인 장벽 명령을 더 작성해야 합니다. 밉맵들을 생성하기 위해 createTextureImage에서 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL로의 기존 전환 코드를 제거합니다. 이것은 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL에 텍스처 이미지의 각 레벨을 남길 것입니다. 각 레벨은 blit 명령 읽기가 완료된 후 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL로 자동 전환됩니다. 이제 밉맵을 생성하는 함수 generateMipmaps를 작성할 것입니다.
         //transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
         
+        copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        
+
         // 마지막에 스테이징 버퍼와 메모리를 정리하여 createTextureImage 함수를 종료합니다.
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-        // ##
+        // 이제 텍스쳐 이미지에 여러 밉 레벨이 존재하지만 스테이징 버퍼는 밉 레벨 0 만 채울 수 있습니다. 다른 레벨은 아직 정의되지 않았습니다. 이 레벨을 채우려면 우리가 가지고 있는 단일 레벨에서 데이터를 생성해야 합니다. 이때 vkCmdBlitImage 명령을 사용합니다. 이 명령은 복사, 크기 조정 및 필터링 작업을 수행합니다. 이것을 여러 번 호출하여 텍스처 이미지의 각 수준으로 데이터를 블리트합니다. 
         generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
     }
 
     // 이미지 개체를 생성해주는 헬퍼함수
-    // ##
     HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
         // 버퍼의 픽셀 값에 하나하나 액세스하도록 셰이더를 설정할 수도 있지만 이 목적을 위해 Vulkan 에선 이미지 개체를 사용하는 것이 좋습니다. 이미지 개체를 사용하면 2D 좌표를 사용할 수 있으므로 색상을 더 쉽고 빠르게 검색할 수 있습니다. 이미지 객체 내의 픽셀은 텍셀로 알려져 있으며 지금부터 그 이름을 사용합니다. 다음 새 클래스 구성원을 추가합니다. 이미지에 대한 매개변수는 VkImageCreateInfo 구조체에 지정됩니다.
@@ -1804,7 +1797,7 @@ private:
         imageInfo.extent.width = width;
         imageInfo.extent.height = height;
         imageInfo.extent.depth = 1;
-        // ##
+        // 밉맵 레벨 수를 지정할 수 있도록 mipLevels 매개변수를 추가하였습니다.
         imageInfo.mipLevels = mipLevels;
         imageInfo.arrayLayers = 1;
         // Vulkan은 가능한 많은 이미지 형식을 지원하지만 텍셀에 대해 버퍼의 픽셀과 동일한 형식을 사용해야 합니다. 그렇지 않으면 복사 작업이 실패합니다.
@@ -1882,6 +1875,7 @@ private:
             barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         }
         barrier.subresourceRange.baseMipLevel = 0;
+        // 이미지 전환에도 마찬가지로 밉맵 레벨 수를 설정해줍니다.
         barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
@@ -1967,7 +1961,7 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
-    // ##
+    // 밉맵들을 생성하는 헬퍼 함수
     HELPER_FUNCTION void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
     {
         // 이제 프로그램에서 3D 모델을 로드하고 렌더링할 수 있습니다. 이 장에서는 Mipmap 생성이라는 기능을 하나 더 추가합니다. Mipmap은 게임 및 렌더링 소프트웨어에서 널리 사용되며 Vulkan은 Mipmap 생성 방법을 완벽하게 제어합니다. Mipmap은 미리 계산되고 축소된 이미지 버전입니다. 각각의 새 이미지는 이전 이미지의 너비와 높이의 절반입니다. 밉맵은 세부 수준 또는 LOD의 형태로 사용됩니다. 카메라에서 멀리 떨어진 개체는 더 작은 밉 이미지에서 텍스처를 샘플링합니다. 더 작은 이미지를 사용하면 렌더링 속도가 빨라지고 모아레 패턴과 같은 아티팩트가 방지됩니다.
@@ -2066,7 +2060,6 @@ private:
     inline void createTextureImageView()
     {
         // 이 장에서는 그래픽 파이프라인이 이미지를 샘플링하는 데 필요한 리소스를 두 개 더 만들 것입니다. 첫 번째 리소스는 이전에 스왑 체인 이미지에서 이미 본 것이지만 두 번째 리소스는 새로운 것입니다. 이는 셰이더가 이미지에서 텍셀을 읽는 방법과 관련이 있습니다. 이전에 스왑 체인 이미지와 프레임 버퍼를 사용하여 이미지에 직접 액세스하지 않고 이미지 뷰를 통해 액세스하는 것을 보았습니다. 또한 텍스처 이미지에 대해 이러한 이미지 뷰를 생성해야 합니다. 텍스처 이미지에 대한 VkImageView를 보유할 클래스 멤버 textureImageView를 추가하고 이를 생성할 새 함수 createTextureImageView를 만듭니다.
-        // ##
         textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
     }
 
