@@ -1961,15 +1961,17 @@ private:
         endSingleTimeCommands(commandBuffer);
     }
 
-    // 밉맵들을 생성하는 헬퍼 함수
+    // 밉맵들을 생성하는 헬퍼 함수 (이미지 형식, 
     HELPER_FUNCTION void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
     {
         // 이제 프로그램에서 3D 모델을 로드하고 렌더링할 수 있습니다. 이 장에서는 Mipmap 생성이라는 기능을 하나 더 추가합니다. Mipmap은 게임 및 렌더링 소프트웨어에서 널리 사용되며 Vulkan은 Mipmap 생성 방법을 완벽하게 제어합니다. Mipmap은 미리 계산되고 축소된 이미지 버전입니다. 각각의 새 이미지는 이전 이미지의 너비와 높이의 절반입니다. 밉맵은 세부 수준 또는 LOD의 형태로 사용됩니다. 카메라에서 멀리 떨어진 개체는 더 작은 밉 이미지에서 텍스처를 샘플링합니다. 더 작은 이미지를 사용하면 렌더링 속도가 빨라지고 모아레 패턴과 같은 아티팩트가 방지됩니다.
 
         // Check if image format supports linear blitting
         VkFormatProperties formatProperties;
+        // vkCmdBlitImage와 같은 내장 함수를 사용하여 모든 밉 레벨을 생성하는 것은 매우 편리하지만 불행히도 모든 플랫폼에서 지원되는 것은 아닙니다. vkGetPhysicalDeviceFormatProperties 함수로 확인할 수 있는 선형 필터링을 지원하는 데 사용하는 텍스처 이미지 형식이 필요합니다. 이를 위해 generateMipmaps 함수에 검사를 추가합니다.
         vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
 
+        // VkFormatProperties 구조체에는 linearTilingFeatures, OptimalTilingFeatures 및 bufferFeatures라는 3개의 필드가 있으며, 각각은 사용 방식에 따라 형식을 사용할 수 있는 방법을 설명합니다. 최적의 타일링 형식으로 텍스처 이미지를 생성하므로 최적의 타일링 기능을 확인해야 합니다. 선형 필터링 기능에 대한 지원은 VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT로 확인할 수 있습니다. 이 경우 두 가지 대안이 있습니다. 선형 블리팅을 지원하는 일반적인 텍스처 이미지 형식을 검색하는 기능을 구현하거나 stb_image_resize와 같은 라이브러리를 사용하여 소프트웨어에서 밉맵 생성을 구현할 수 있습니다. 그러면 원본 이미지를 로드한 것과 동일한 방식으로 각 밉 레벨을 이미지에 로드할 수 있습니다. 어쨌든 런타임에 밉맵 수준을 생성하는 것은 실제로 드물다는 점에 유의해야 합니다.일반적으로 로드 속도를 향상시키기 위해 기본 레벨과 함께 텍스처 파일에 미리 생성되어 저장됩니다. 소프트웨어에서 크기 조정을 구현하고 파일에서 여러 수준을 로드하는 것은 독자에게 연습 문제로 남겨둡니다.
         if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
         {
             throw std::runtime_error("Texture image format does not support linear blitting!");
