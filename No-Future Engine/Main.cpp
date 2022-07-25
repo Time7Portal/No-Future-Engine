@@ -1782,8 +1782,9 @@ private:
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-        // 이제 텍스쳐 이미지에 여러 밉 레벨이 존재하지만 스테이징 버퍼는 밉 레벨 0 만 채울 수 있습니다. 다른 레벨은 아직 정의되지 않았습니다. 이 레벨을 채우려면 우리가 가지고 있는 단일 레벨에서 데이터를 생성해야 합니다. 이때 vkCmdBlitImage 명령을 사용합니다. 이 명령은 복사, 크기 조정 및 필터링 작업을 수행합니다. 이것을 여러 번 호출하여 텍스처 이미지의 각 수준으로 데이터를 블리트합니다. 
+        // 이제 텍스쳐 이미지에 여러 밉 레벨이 존재하지만 스테이징 버퍼는 밉 레벨 0 만 채울 수 있습니다. 다른 레벨은 아직 정의되지 않았습니다. 이 레벨을 채우려면 우리가 가지고 있는 단일 레벨에서 데이터를 생성해야 합니다. 이때 vkCmdBlitImage 명령을 사용합니다. 이 명령은 복사, 크기 조정 및 필터링 작업을 수행합니다. 이것을 여러 번 호출하여 텍스처 이미지의 각 레벨로 데이터를 블리트해야 합니다. 
         generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+        // 이제 텍스쳐 이미지의 밉맵들이 완전히 채워졌습니다.
     }
 
     // 이미지 개체를 생성해주는 헬퍼함수
@@ -1977,6 +1978,7 @@ private:
 
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 
+        // 몇 가지 트렌지션을 수행할 것이므로 전에 만든 VkImageMemoryBarrier를 재사용합니다. 아래 설정된 필드는 모든 장벽에 대해 동일하게 유지됩니다.
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.image = image;
@@ -1990,8 +1992,10 @@ private:
         int32_t mipWidth = texWidth;
         int32_t mipHeight = texHeight;
 
+        // 이 루프는 각 VkCmdBlitImage 명령을 기록합니다. 루프 변수는 0이 아닌 1에서 시작합니다.
         for (uint32_t i = 1; i < mipLevels; i++)
         {
+            // subresourceRange.miplevel, oldLayout, newLayout, srcAccessMask 및 dstAccessMask는 각 전환에 대해 변경합니다.
             barrier.subresourceRange.baseMipLevel = i - 1;
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -2004,26 +2008,32 @@ private:
                 0, nullptr,
                 1, &barrier);
 
+            // 먼저 레벨 i - 1을 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL로 전환합니다. 이 전환은 이전 blit 명령이나 vkCmdCopyBufferToImage에서 레벨 i - 1이 채워질 때까지 기다립니다. 현재 blit 명령은 이 전환을 기다립니다.
             VkImageBlit blit{};
             blit.srcOffsets[0] = { 0, 0, 0 };
             blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
             blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            // 다음으로 blit 작업에 사용할 영역을 지정합니다. 소스 밉 레벨은 i - 1 입니다.
             blit.srcSubresource.mipLevel = i - 1;
             blit.srcSubresource.baseArrayLayer = 0;
             blit.srcSubresource.layerCount = 1;
+            // srcOffsets 배열의 두 요소는 데이터가 제거될 3D 영역을 결정합니다. dstOffsets는 데이터가 blit될 영역을 결정합니다. dstOffsets[1]의 X 및 Y 치수는 각 밉 레벨이 이전 레벨 크기의 절반이기 때문에 2로 나뉩니다. 2D 이미지의 깊이가 1이므로 srcOffsets[1] 및 dstOffsets[1]의 Z 차원은 1이어야 합니다.
             blit.dstOffsets[0] = { 0, 0, 0 };
             blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1 };
             blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            // 대상 밉 레벨은 i입니다.
             blit.dstSubresource.mipLevel = i;
             blit.dstSubresource.baseArrayLayer = 0;
             blit.dstSubresource.layerCount = 1;
 
+            // 이제 blit 명령을 기록합니다. textureImage는 srcImage 및 dstImage 매개변수 모두에 사용됩니다. 이는 동일한 이미지의 서로 다른 레벨 사이에서 블리팅하기 때문입니다. 소스 밉 레벨이 방금 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL로 전환되었고 대상 레벨은 여전히 createTextureImage의 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL에 있습니다. 전용 전송 큐를 사용하는 경우 주의하십시오(정점 버퍼에서 다뤘던 내용 참고) : vkCmdBlitImage는 그래픽 기능이 있는 대기열에 제출해야 합니다. 마지막 매개변수를 사용하면 blit에서 사용할 VkFilter를 지정할 수 있습니다. 여기에 VkSampler를 만들 때와 동일한 필터링 옵션이 있습니다. 여기선 선형 보간을 활성화하기 위해 VK_FILTER_LINEAR를 사용합니다.
             vkCmdBlitImage(commandBuffer,
                 image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 1, &blit,
                 VK_FILTER_LINEAR);
 
+            // 이 장벽은 밉 레벨 i - 1을 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL로 전환합니다. 이 전환은 현재 blit 명령이 완료될 때까지 기다립니다. 모든 샘플링 작업은 이 전환이 완료될 때까지 기다립니다.
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -2035,10 +2045,12 @@ private:
                 0, nullptr,
                 1, &barrier);
 
+            // 루프가 끝나면 현재 밉 치수를 2로 나눕니다. 차원이 0이 되지 않도록 나누기 전에 각 차원을 확인합니다. 이것은 밉 차원 중 하나가 다른 차원보다 먼저 1에 도달하기 때문에 이미지가 정사각형이 아닌 경우를 처리합니다. 이 경우 해당 차원은 나머지 모든 수준에 대해 1로 유지되어야 합니다.
             if (mipWidth > 1) mipWidth /= 2;
             if (mipHeight > 1) mipHeight /= 2;
         }
 
+        // 명령 버퍼를 종료하기 전에 파이프라인 장벽을 하나 더 삽입합니다. 이 장벽은 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL에서 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL로 마지막 밉 레벨을 전환합니다. 이것은 마지막 밉 레벨은 절대 블리트되지 않기 때문에 루프에서 처리되지 않았기 때문입니다.
         barrier.subresourceRange.baseMipLevel = mipLevels - 1;
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
