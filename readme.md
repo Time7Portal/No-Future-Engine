@@ -107,6 +107,9 @@ tiny_obj_loader 라이브러리를 이용한 OBJ 로딩과 중복 버텍스를 �
 결과
 ![initial](https://user-images.githubusercontent.com/17117191/177825645-1fdb227b-0cad-4b19-a223-ccbf09cf56fc.png)
 
+### 2022-07-25
+
+밉맵핑을 구현하였습니다.
 
 
 # References | 참고자료
