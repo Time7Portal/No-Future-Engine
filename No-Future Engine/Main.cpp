@@ -358,7 +358,7 @@ private:
         // 몇개의 확장 기능을 지원하는지 갯수를 우선 받은 후에
         uint32_t extensionCount = 0;
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        std::cout << extensionCount << " extensions supported\n";
+        std::cout << "@ [INFO] : " << extensionCount << " extensions supported\n";
         // 그 갯수 정보를 활용해서 지원 목록을 받아옵니다.
         std::vector<VkExtensionProperties> extensions(extensionCount);
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
@@ -577,7 +577,7 @@ private:
         }
         else
         {
-            std::cerr << "@ [INFO] : " << pCallbackData->pMessage << std::endl;
+            std::cout << "@ [INFO] : " << pCallbackData->pMessage << std::endl;
         }
         
         return VK_FALSE; // 디버깅용 콜백 함수는 반드시 VK_FALSE 를 반환하도록 약속되어 있습니다.
@@ -797,14 +797,14 @@ private:
         vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 
         VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
-        if (counts & VK_SAMPLE_COUNT_64_BIT) { std::cerr << "@ [INFO] : This GPU support 64 MSAA" << std::endl;  return VK_SAMPLE_COUNT_64_BIT; }
-        if (counts & VK_SAMPLE_COUNT_32_BIT) { std::cerr << "@ [INFO] : This GPU support 32 MSAA" << std::endl;  return VK_SAMPLE_COUNT_32_BIT; }
-        if (counts & VK_SAMPLE_COUNT_16_BIT) { std::cerr << "@ [INFO] : This GPU support 16 MSAA" << std::endl;  return VK_SAMPLE_COUNT_16_BIT; }
-        if (counts & VK_SAMPLE_COUNT_8_BIT)  { std::cerr << "@ [INFO] : This GPU support 8 MSAA" << std::endl;   return VK_SAMPLE_COUNT_8_BIT;  }
-        if (counts & VK_SAMPLE_COUNT_4_BIT)  { std::cerr << "@ [INFO] : This GPU support 4 MSAA" << std::endl;   return VK_SAMPLE_COUNT_4_BIT;  }
-        if (counts & VK_SAMPLE_COUNT_2_BIT)  { std::cerr << "@ [INFO] : This GPU support 2 MSAA" << std::endl;   return VK_SAMPLE_COUNT_2_BIT;  }
+        if (counts & VK_SAMPLE_COUNT_64_BIT) { std::cout << "@ [INFO] : This Device supports 64 MSAA" << std::endl;  return VK_SAMPLE_COUNT_64_BIT; }
+        if (counts & VK_SAMPLE_COUNT_32_BIT) { std::cout << "@ [INFO] : This Device supports 32 MSAA" << std::endl;  return VK_SAMPLE_COUNT_32_BIT; }
+        if (counts & VK_SAMPLE_COUNT_16_BIT) { std::cout << "@ [INFO] : This Device supports 16 MSAA" << std::endl;  return VK_SAMPLE_COUNT_16_BIT; }
+        if (counts & VK_SAMPLE_COUNT_8_BIT)  { std::cout << "@ [INFO] : This Device supports 8 MSAA" << std::endl;   return VK_SAMPLE_COUNT_8_BIT;  }
+        if (counts & VK_SAMPLE_COUNT_4_BIT)  { std::cout << "@ [INFO] : This Device supports 4 MSAA" << std::endl;   return VK_SAMPLE_COUNT_4_BIT;  }
+        if (counts & VK_SAMPLE_COUNT_2_BIT)  { std::cout << "@ [INFO] : This Device supports 2 MSAA" << std::endl;   return VK_SAMPLE_COUNT_2_BIT;  }
 
-        std::cerr << "@ [INFO] : This GPU support NO MSAA" << std::endl;
+        std::cout << "@ [INFO] : This Device supports NO MSAA" << std::endl;
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
