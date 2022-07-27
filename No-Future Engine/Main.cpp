@@ -263,6 +263,7 @@ private:
     VkSurfaceKHR surface;                               // 추상적 화면 객체 핸들. 이 개체는 플랫폼(Windows, Linux, Android 등)에 독립적으로 화면을 관리할 수 있도록 도와줍니다. 우리 프로그램은 GLFW 로 생성한 화면을 이용합니다.
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;   // 선택된 그래픽카드 디바이스 핸들. vkInstance 와 함께 자동으로 소멸됩니다.
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;  // $$
     VkDevice device;                                    // 추상적 디바이스 핸들. 그래픽카드와 통신하기 위한 인터페이스 입니다. 하나의 그래픽카드에 여러개의 추상적 디바이스를 만들 수도 있습니다.
 
     VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 추상적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
@@ -281,6 +282,10 @@ private:
     VkPipeline graphicsPipeline;                        // 그래픽스 파이프라인 핸들
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
+
+    VkImage colorImage;                                 // $$
+    VkDeviceMemory colorImageMemory;                    // $$
+    VkImageView colorImageView;                         // $$
 
     VkImage depthImage;                                 // 깊이 이미지 핸들. 깊이 어태치먼트는 색상 어태치먼트와 마찬가지로 이미지를 기반으로 합니다. 차이점은 스왑 체인이 자동으로 깊이 이미지를 생성하지 않는다는 것입니다. 한 번에 하나의 그리기 작업만 실행되기 때문에 하나의 깊이 이미지만 필요합니다. 깊이 이미지에는 이미지, 메모리 및 이미지 보기의 세 가지 리소스가 필요합니다.
     VkDeviceMemory depthImageMemory;                    // 깊이 이미지 메모리 핸들
@@ -396,6 +401,8 @@ private:
         createGraphicsPipeline();       // 2-9. 셰이더 로드 및 그래픽스 파이프라인 생성
 
         createCommandPool();            // 2-10. 그래픽 카드로 보낼 명령 풀(커맨드 버퍼 모음) 생성 : 추후 command buffer allocation 에 사용할 예정
+
+        createColorResources();         // $$
 
         createDepthResources();         // 2-11. 깊이 이미지 생성 (깊이 테스트를 위함)
 
@@ -694,6 +701,9 @@ private:
             {
                 // 적합한 그래픽카드를 하나 찾았으므로 핸들에 보관해두고 더이상 탐색하지 않습니다.
                 physicalDevice = device;
+
+                // $$
+                msaaSamples = getMaxUsableSampleCount();
                 break;
             }
         }
@@ -778,6 +788,24 @@ private:
 
         // 지원하는 큐 페밀리의 인덱스 번호들을 담고 있습니다.
         return indices;
+    }
+
+    // $$
+    HELPER_FUNCTION VkSampleCountFlagBits getMaxUsableSampleCount()
+    {
+        VkPhysicalDeviceProperties physicalDeviceProperties;
+        vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+
+        VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+        if (counts & VK_SAMPLE_COUNT_64_BIT) { std::cerr << "@ [INFO] : This GPU support 64 MSAA" << std::endl;  return VK_SAMPLE_COUNT_64_BIT; }
+        if (counts & VK_SAMPLE_COUNT_32_BIT) { std::cerr << "@ [INFO] : This GPU support 32 MSAA" << std::endl;  return VK_SAMPLE_COUNT_32_BIT; }
+        if (counts & VK_SAMPLE_COUNT_16_BIT) { std::cerr << "@ [INFO] : This GPU support 16 MSAA" << std::endl;  return VK_SAMPLE_COUNT_16_BIT; }
+        if (counts & VK_SAMPLE_COUNT_8_BIT)  { std::cerr << "@ [INFO] : This GPU support 8 MSAA" << std::endl;   return VK_SAMPLE_COUNT_8_BIT;  }
+        if (counts & VK_SAMPLE_COUNT_4_BIT)  { std::cerr << "@ [INFO] : This GPU support 4 MSAA" << std::endl;   return VK_SAMPLE_COUNT_4_BIT;  }
+        if (counts & VK_SAMPLE_COUNT_2_BIT)  { std::cerr << "@ [INFO] : This GPU support 2 MSAA" << std::endl;   return VK_SAMPLE_COUNT_2_BIT;  }
+
+        std::cerr << "@ [INFO] : This GPU support NO MSAA" << std::endl;
+        return VK_SAMPLE_COUNT_1_BIT;
     }
 
 
@@ -1115,7 +1143,7 @@ private:
         VkAttachmentDescription colorAttachment{};
         // 색상 어태치먼트 형식은 스왑 체인 이미지 형식과 동일해야 하며 아직 멀티샘플링을 사용하지 않으므로 1개의 샘플을 사용합니다.
         colorAttachment.format = swapChainImageFormat;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.samples = msaaSamples; // $$ colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         // loadOp 및 storeOp는 렌더링 전과 렌더링 후에 어태치먼트 데이터로 수행할 작업을 결정합니다.
         // loadOp에 대해 다음과 같은 선택 사항이 있습니다.
         // VK_ATTACHMENT_LOAD_OP_LOAD: 기존 어태치먼트 내용을 유지합니다.
@@ -1139,13 +1167,13 @@ private:
         // 텍스처링 장에서 이 주제에 대해 더 깊이 논의할 것이지만 지금 알아야 할 중요한 것은 이미지가 다음에 포함될 작업에 적합한 특정 레이아웃으로 전환되어야 한다는 것입니다.
         // initialLayout은 렌더 패스가 시작되기 전에 이미지가 가질 레이아웃을 지정합니다. finalLayout은 렌더 패스가 완료될 때 자동으로 전환할 레이아웃을 지정합니다. initialLayout에 VK_IMAGE_LAYOUT_UNDEFINED 를 사용한다는 것은 이미지가 어떤 이전 레이아웃에 있던지 신경 쓰지 않는다는 것을 의미합니다. 이 값의 주의 사항으로 이미지의 내용이 보존된다는 보장이 없지만 우리가 계속해서 클리어 할 것이기 때문에 중요하지 않다는 것입니다. 렌더링 후 스왑 체인을 사용하여 이미지를 표시할 준비가 되기를 원합니다. 이것이 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR을 finalLayout으로 사용하는 이유입니다.
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // $$ colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 
         // 이제 깊이 어태치먼트를 포함하도록 createRenderPass를 수정할 것입니다. 먼저 VkAttachmentDescription을 지정합니다. 형식은 깊이 이미지 자체와 동일해야 합니다. 이번에는 깊이 데이터(storeOp)를 저장하는 데 신경 쓰지 않습니다. 그리기가 완료된 후에는 사용되지 않기 때문입니다. 이를 통해 하드웨어가 추가 최적화를 수행할 수 있습니다. 색상 버퍼와 마찬가지로 이전 깊이 내용은 신경 쓰지 않으므로 VK_IMAGE_LAYOUT_UNDEFINED를 initialLayout으로 사용할 수 있습니다.
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = findDepthFormat();
-        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.samples = msaaSamples; // $$ depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1153,6 +1181,18 @@ private:
         depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+
+        // $$
+        VkAttachmentDescription colorAttachmentResolve{};
+        colorAttachmentResolve.format = swapChainImageFormat;
+        colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        
 
         // 서브패스 및 어태치먼트 속성 설정
         // 하나의 렌더 패스는 여러 서브(하위)패스로 구성될 수 있습니다. 서브패스는 이전 패스의 프레임 버퍼 내용에 따라 달라지는 후속 렌더링 작업입니다(예: 차례로 적용되는 후처리 효과 시퀀스). 이러한 렌더링 작업을 하나의 렌더 패스로 그룹화하면 Vulkan은 작업을 재정렬하고 더 나은 성능을 위해 메모리 대역폭을 절약할 수 있습니다. 그러나 첫 번째 삼각형의 경우 단일 서브패스를 사용합니다.
@@ -1166,6 +1206,11 @@ private:
         VkAttachmentReference depthAttachmentRef{};
         depthAttachmentRef.attachment = 1;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        
+        // $$
+        VkAttachmentReference colorAttachmentResolveRef{};
+        colorAttachmentResolveRef.attachment = 2;
+        colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 
         // 서브패스는 VkSubpassDescription 구조를 사용하여 설명됩니다.
@@ -1181,6 +1226,7 @@ private:
         // pDepthStencilAttachment : 깊이 및 스텐실 데이터에 대한 어태치먼트
         // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 어태치먼트
         subpass.pDepthStencilAttachment = &depthAttachmentRef; // 유일하게 존재하는 서브패스 하나에 대해 깊이 어태치먼트 참조를 추가합니다.
+        subpass.pResolveAttachments = &colorAttachmentResolveRef; // $$
 
 
         // 서브패스 종속성 설정
@@ -1199,7 +1245,7 @@ private:
         
 
         // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다. 컬러 어태치먼트와 다르게 서브패스는 단일 깊이(+스텐실) 어태치먼트만 사용할 수 있습니다. 여러 버퍼에서 깊이 테스트를 수행하는 것은 사실상 의미가 없기 때문입니다. 추가로 두 어태치먼트들을 모두 보관하고 참조할 수 있도록 VkRenderPassCreateInfo 구조체를 업데이트 하였습니다.
-        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+        std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve }; // $$
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1395,7 +1441,7 @@ private:
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisampling.rasterizationSamples = msaaSamples; // $$ multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
         multisampling.minSampleShading = 1.0f; // Optional
         multisampling.pSampleMask = nullptr; // Optional
         multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -1609,6 +1655,17 @@ private:
 
 
 
+    // $$
+    void createColorResources()
+    {
+        VkFormat colorFormat = swapChainImageFormat;
+
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
+        colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    }
+
+
+
     // 2-11. 깊이 이미지 생성 (깊이 테스트를 위함)
     inline void createDepthResources()
     {
@@ -1619,8 +1676,8 @@ private:
         // 스텐실 구성 요소는 스텐실 테스트 https://en.wikipedia.org/wiki/Stencil_buffer 에 사용되며, 이는 깊이 테스트와 결합할 수 있는 추가 테스트입니다. 이에 대해서는 다음 장에서 살펴보겠습니다.
         VkFormat depthFormat = findDepthFormat();
 
-        // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다.
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다. $$
+        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
         // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다.
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         // 여기까지가 깊이 이미지를 만들기 위한 것입니다. 색상 어태치먼트처럼 렌더 패스의 시작 부분에서 갱신할 것이기 때문에 매핑하거나 다른 이미지를 복사할 필요가 없습니다.
@@ -1689,10 +1746,11 @@ private:
         for (size_t i = 0; i < swapChainImageViews.size(); i++)
         {
             // 다음 단계는 깊이 이미지를 깊이 어태치먼트에 바인딩하도록 프레임 버퍼 생성을 수정하는 것입니다. createFramebuffers로 이동하여 깊이 이미지 뷰를 두 번째 어태치먼트로 지정합니다.
-            std::array<VkImageView, 2> attachments = {
-                swapChainImageViews[i],
+            std::array<VkImageView, 3> attachments = {
+                colorImageView,
                 // 색상 어태치먼트는 스왑 체인 이미지마다 다르지만 모든 스왑 체인 이미지에서 동일한 깊이 이미지를 사용할 수 있습니다. 이유는 세마포어로 인해 오직 하나의 서브패스만 동시에 실행되기 때문입니다.
-                depthImageView
+                depthImageView,
+                swapChainImageViews[i] // $$
             };
 
             // 보시다시피 프레임 버퍼 생성은 매우 간단합니다. 먼저 어떤 렌더패스가 프레임 버퍼와 호환되는지 지정해야 합니다. 해당 렌더패스에 호환되는 프레임 버퍼만 사용할 수 있습니다.
@@ -1765,7 +1823,7 @@ private:
         stbi_image_free(pixels);
 
         // 이 함수는 이미 상당히 커지고 있으며 이후 장에서 더 많은 이미지를 생성해야 할 필요가 있으므로 버퍼에서 했던 것처럼 이미지 생성을 createImage 함수로 추상화해야 합니다. 함수를 만들고 이미지 개체 생성 및 메모리 할당을 해당 함수로 이동합니다. 너비, 높이, 형식, 타일링 모드, 사용량 및 메모리 속성 매개변수를 만들었습니다. 이 매개변수는 이 튜토리얼 전체에서 만들 이미지마다 다를 수 있기 때문입니다. 밉 매핑에 사용할 vkCmdBlitImage는 전송 작업으로 간주되므로 Vulkan 에 텍스처 이미지를 전송의 소스 및 대상으로 사용할 것임을 알려야 합니다. createTextureImage의 텍스처 이미지 사용 플래그에 VK_IMAGE_USAGE_TRANSFER_SRC_BIT를 추가합니다. 다른 이미지 작업과 마찬가지로 vkCmdBlitImage는 작업하는 이미지의 레이아웃에 따라 다릅니다. 전체 이미지를 VK_IMAGE_LAYOUT_GENERAL로 전환할 수 있지만 이는 느릴 가능성이 큽니다. 최적의 성능을 위해 소스 이미지는 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL에 있어야 하고 대상 이미지는 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL에 있어야 합니다. Vulkan을 사용하면 이미지의 각 밉 레벨을 독립적으로 전환할 수 있습니다. 각 blit은 한 번에 두 개의 밉 레벨만 처리하므로 각 레벨을 blits 명령 간에 최적의 레이아웃으로 전환할 수 있습니다.
-        createImage(texWidth, texHeight, mipLevels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
+        createImage(texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage, textureImageMemory);
 
         // 이제 텍스쳐 이미지 설정을 완료하는 데 필요한 모든 도구가 있으므로 createTextureImage 함수로 돌아갑니다. 우리가 거기서 마지막으로 한 것은 텍스처 이미지를 만드는 것이었습니다. 다음 단계는 스테이징 버퍼를 텍스처 이미지에 복사하는 것입니다. 여기에는 두 단계가 포함됩니다.
         // 1. 텍스처 이미지를 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL로 전환
@@ -1787,7 +1845,7 @@ private:
     }
 
     // 이미지 개체를 생성해주는 헬퍼함수
-    HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+    HELPER_FUNCTION void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
     {
         // 버퍼의 픽셀 값에 하나하나 액세스하도록 셰이더를 설정할 수도 있지만 이 목적을 위해 Vulkan 에선 이미지 개체를 사용하는 것이 좋습니다. 이미지 개체를 사용하면 2D 좌표를 사용할 수 있으므로 색상을 더 쉽고 빠르게 검색할 수 있습니다. 이미지 객체 내의 픽셀은 텍셀로 알려져 있으며 지금부터 그 이름을 사용합니다. 다음 새 클래스 구성원을 추가합니다. 이미지에 대한 매개변수는 VkImageCreateInfo 구조체에 지정됩니다.
         VkImageCreateInfo imageInfo{};
@@ -1815,7 +1873,7 @@ private:
         // usage 필드는 버퍼 생성의 그것과 동일한 의미를 가집니다. 이미지는 버퍼 복사의 대상으로 사용되므로 전송 대상으로 설정해야 합니다. 또한 셰이더에서 이미지에 액세스하여 메시에 색상을 지정할 수 있기를 원하므로 사용에는 VK_IMAGE_USAGE_SAMPLED_BIT가 포함되어야 합니다.
         imageInfo.usage = usage;
         // 샘플 플래그는 멀티샘플링과 관련이 있습니다. 이것은 어태치먼트로 사용할 이미지에만 관련이 있으므로 하나의 샘플을 사용하십시오. 희소 이미지와 관련된 이미지에 대한 몇 가지 선택적 플래그가 있습니다. 희소 이미지는 실제 메모리의 특정 영역만 지원하기 위한 이미지입니다. 예를 들어, 복셀 지형에 3D 텍스처를 사용하는 경우 대량의 "공기" 값을 저장하기 위해 메모리를 할당하여 낭비하는 것을 방지할 수 있습니다. 이 튜토리얼에서는 사용하지 않을 것이므로 기본값인 0으로 두십시오.
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.samples = numSamples; // $$ imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.flags = 0; // Optional
         // 이미지는 하나의 큐 페밀리, 즉 그래픽(및 그에 따른) 전송 작업을 지원하는 페밀리 하나만 사용할 예정입니다.
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -2721,6 +2779,7 @@ private:
         // 아래가 스왑 체인을 다시 만드는 데 필요한 모든 것입니다! 그러나 이 접근 방식의 단점은 새 스왑 체인을 만들기 전에 모든 렌더링이 중지된다는 것입니다. 이전 스왑 체인에서 이미지에 명령을 그리는 동안 새 스왑 체인을 만들 수 있습니다. VkSwapchainCreateInfoKHR 구조체의 oldSwapChain 필드에 이전 스왑 체인을 전달하고 사용을 마치는 즉시 이전 스왑 체인을 파괴함으로써 새로운 스왑 체인과 자연스럽게 연결시킬 수도 있습니다.
         createSwapChain();
         createImageViews();
+        createColorResources(); // $$
         createRenderPass();
         createGraphicsPipeline();
         createDepthResources();
@@ -2931,6 +2990,11 @@ private:
         vkDestroyImageView(device, depthImageView, nullptr);
         vkDestroyImage(device, depthImage, nullptr);
         vkFreeMemory(device, depthImageMemory, nullptr);
+
+        // $$
+        vkDestroyImageView(device, colorImageView, nullptr);
+        vkDestroyImage(device, colorImage, nullptr);
+        vkFreeMemory(device, colorImageMemory, nullptr);
 
         // 이미지 뷰들과 랜더패스를 지우기 전에 먼저 이들을 사용하고 있는 프레임 버퍼를 삭제해야 합니다.
         for (auto framebuffer : swapChainFramebuffers)
