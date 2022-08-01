@@ -263,7 +263,7 @@ private:
     VkSurfaceKHR surface;                               // 추상적 화면 객체 핸들. 이 개체는 플랫폼(Windows, Linux, Android 등)에 독립적으로 화면을 관리할 수 있도록 도와줍니다. 우리 프로그램은 GLFW 로 생성한 화면을 이용합니다.
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;   // 선택된 그래픽카드 디바이스 핸들. vkInstance 와 함께 자동으로 소멸됩니다.
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;  // $$
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;  // 그래픽카드가 사용할 수 있는 샘플 수를 결정하는 것으로 시작하겠습니다. 대부분의 최신 GPU는 최소 8개의 샘플을 지원하지만 이 숫자가 항상 동일하다고 보장할 수는 없습니다. 우리는 새로운 클래스 멤버를 추가하여 그래픽카드의 최대 샘플 수를 검사할 것입니다.
     VkDevice device;                                    // 추상적 디바이스 핸들. 그래픽카드와 통신하기 위한 인터페이스 입니다. 하나의 그래픽카드에 여러개의 추상적 디바이스를 만들 수도 있습니다.
 
     VkQueue graphicsQueue;                              // 그래픽 큐 핸들. 사실 큐는 추상적 디바이스를 만들때 같이 만들어집니다. 하지만 만들어질 그래픽 큐를 다룰 수 있는 핸들을 따로 만들어 관리해야 합니다. VkDevice 와 함께 자동으로 소멸됩니다.
@@ -283,9 +283,10 @@ private:
 
     VkCommandPool commandPool;                          // 커맨드 풀 버퍼. 커맨드 풀은 버퍼를 저장하는 데 사용되는 메모리를 관리합니다.
 
-    VkImage colorImage;                                 // $$
-    VkDeviceMemory colorImageMemory;                    // $$
-    VkImageView colorImageView;                         // $$
+    // MSAA에서 각 픽셀은 오프스크린 버퍼에서 샘플링된 다음 화면에 렌더링됩니다. 이 새로운 버퍼는 우리가 렌더링해온 일반 이미지와 약간 다릅니다. 픽셀당 하나 이상의 샘플을 저장할 수 있어야 합니다. 멀티샘플링된 버퍼가 생성되면 디폴트 프레임 버퍼(픽셀당 단일 샘플만 저장)로 확인해야 합니다. 이것이 추가 렌더 타겟을 생성하고 현재 드로잉 프로세스를 수정해야 하는 이유입니다. 깊이 버퍼와 마찬가지로 한 번에 하나의 그리기 작업만 활성화되므로 하나의 렌더 타겟만 필요합니다. 다음 클래스 멤버들을 추가합니다.
+    VkImage colorImage;                                 // 컬러 이미지 핸들
+    VkDeviceMemory colorImageMemory;                    // 컬러 이미지 메모리 핸들
+    VkImageView colorImageView;                         // 컬러 이미지 뷰 핸들
 
     VkImage depthImage;                                 // 깊이 이미지 핸들. 깊이 어태치먼트는 색상 어태치먼트와 마찬가지로 이미지를 기반으로 합니다. 차이점은 스왑 체인이 자동으로 깊이 이미지를 생성하지 않는다는 것입니다. 한 번에 하나의 그리기 작업만 실행되기 때문에 하나의 깊이 이미지만 필요합니다. 깊이 이미지에는 이미지, 메모리 및 이미지 보기의 세 가지 리소스가 필요합니다.
     VkDeviceMemory depthImageMemory;                    // 깊이 이미지 메모리 핸들
@@ -702,7 +703,7 @@ private:
                 // 적합한 그래픽카드를 하나 찾았으므로 핸들에 보관해두고 더이상 탐색하지 않습니다.
                 physicalDevice = device;
 
-                // $$
+                // 이제 이 getMaxUsableSampleCount() 함수를 사용하여 물리적 장치 선택 프로세스 중에 msaaSamples 변수를 설정합니다. 이를 위해 pickPhysicalDevice 함수를 약간 수정해야 합니다.
                 msaaSamples = getMaxUsableSampleCount();
                 break;
             }
@@ -790,9 +791,11 @@ private:
         return indices;
     }
 
-    // $$
+    // 그래픽카드가 지원하는 최대 MSAA 샘플 수를 찾아서 반환해주는 헬퍼함수
     HELPER_FUNCTION VkSampleCountFlagBits getMaxUsableSampleCount()
     {
+        // 기본적으로 멀티샘플링이 없는 것처럼 픽셀당 하나의 샘플만 사용하며, 이 경우 최종 이미지는 변경되지 않은 상태로 유지됩니다. 정확한 최대 샘플 수는 선택한 그래픽 카드와 연결된 VkPhysicalDeviceProperties에서 추출할 수 있습니다. 우리는 깊이 버퍼를 사용하고 있으므로 색상과 깊이 모두에 대한 샘플 수를 고려해야 합니다. (&) 연산을 통해 해당 비트 플래그가 활성화되어 있다면 해당 샘플 갯수만큼 지원하는 것입니다. 우리는 최대값을 사용할 예정입니다.
+
         VkPhysicalDeviceProperties physicalDeviceProperties;
         vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 
@@ -844,7 +847,8 @@ private:
         VkPhysicalDeviceFeatures deviceFeatures{};
         // 이방성 필터링은 선택적인 장치 기능이기 때문에 직접 enable 해야 합니다. 추가로 최신 그래픽 카드가 지원하지 않을 가능성은 매우 낮지만 사용 가능한지 확인하기 위해 isDeviceSuitable을 업데이트해야 합니다.
         deviceFeatures.samplerAnisotropy = VK_TRUE;
-
+        // 보다 상세한 장면에서 출력 이미지의 품질에 영향을 미칠 수 있는 MSAA 구현의 특정 제한 사항이 있습니다. 예를 들어, 우리는 현재 셰이더 앨리어싱으로 인해 발생할 수 있는 잠재적인 문제를 해결하고 있지 않습니다. 즉, MSAA는 내부 채우기는 제외하고 지오메트리의 가장자리만 부드럽게 합니다. 이로 인해 화면에 부드러운 다각형이 렌더링되지만 높은 대비 색상이 다각형 안쪽에 포함된 경우 적용된 텍스처가 여전히 앨리어스되어 보이는 상황이 발생할 수 있습니다. 이 문제에 접근하는 한 가지 방법은 샘플 셰이딩을 활성화하여 추가 성능 비용이 발생하더라도 이미지 품질을 더욱 향상시킬 수 있습니다.
+        deviceFeatures.sampleRateShading = VK_TRUE; // enable sample shading feature for the device
 
         // 2-4-3. 이제 논리 장치를 만듭니다. 논리 장치를 만들때 위에서 미리 만들어둔 VkDeviceQueueCreateInfo, VkPhysicalDeviceFeatures 두개의 설정값들을 사용합니다.
         VkDeviceCreateInfo createInfo{};
@@ -1143,13 +1147,13 @@ private:
         VkAttachmentDescription colorAttachment{};
         // 색상 어태치먼트 형식은 스왑 체인 이미지 형식과 동일해야 하며 아직 멀티샘플링을 사용하지 않으므로 1개의 샘플을 사용합니다.
         colorAttachment.format = swapChainImageFormat;
-        colorAttachment.samples = msaaSamples; // $$ colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.samples = msaaSamples;
         // loadOp 및 storeOp는 렌더링 전과 렌더링 후에 어태치먼트 데이터로 수행할 작업을 결정합니다.
         // loadOp에 대해 다음과 같은 선택 사항이 있습니다.
         // VK_ATTACHMENT_LOAD_OP_LOAD: 기존 어태치먼트 내용을 유지합니다.
         // VK_ATTACHMENT_LOAD_OP_CLEAR: 시작 시 값을 상수로 지웁니다.
         // VK_ATTACHMENT_LOAD_OP_DONT_CARE : 시작 값은 신경 안씁니다.
-        // // 우리의 경우 새 프레임을 그리기 전에 clear 작업을 사용하여 프레임 버퍼를 검은색으로 지웁니다.
+        // 우리의 경우 새 프레임을 그리기 전에 clear 작업을 사용하여 프레임 버퍼를 검은색으로 지웁니다.
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         // storeOp에는 두 가지 가능성만 있습니다.
         // VK_ATTACHMENT_STORE_OP_STORE: 렌더링된 콘텐츠는 메모리에 저장되며 나중에 읽을 수 있습니다.
@@ -1167,6 +1171,7 @@ private:
         // 텍스처링 장에서 이 주제에 대해 더 깊이 논의할 것이지만 지금 알아야 할 중요한 것은 이미지가 다음에 포함될 작업에 적합한 특정 레이아웃으로 전환되어야 한다는 것입니다.
         // initialLayout은 렌더 패스가 시작되기 전에 이미지가 가질 레이아웃을 지정합니다. finalLayout은 렌더 패스가 완료될 때 자동으로 전환할 레이아웃을 지정합니다. initialLayout에 VK_IMAGE_LAYOUT_UNDEFINED 를 사용한다는 것은 이미지가 어떤 이전 레이아웃에 있던지 신경 쓰지 않는다는 것을 의미합니다. 이 값의 주의 사항으로 이미지의 내용이 보존된다는 보장이 없지만 우리가 계속해서 클리어 할 것이기 때문에 중요하지 않다는 것입니다. 렌더링 후 스왑 체인을 사용하여 이미지를 표시할 준비가 되기를 원합니다. 이것이 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR을 finalLayout으로 사용하는 이유입니다.
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        // finalLayout이 VK_IMAGE_LAYOUT_PRESENT_SRC_KHR에서 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL로 변경되었음을 알 수 있습니다. 다중 샘플링된 이미지는 직접 표시할 수 없기 때문입니다. 우선 일반 이미지로 이를 해결해야 합니다. 이 요구 사항은 깊이 버퍼에는 적용되지 않습니다. 어떤 시점에서도 표시되지 않기 때문입니다. 따라서 우리는 일명 resolve 어태치먼트라고 하는 color 에 대해 하나의 새로운 어태치먼트를 추가해야 합니다. (아래 colorAttachmentResolve 생성 코드 참고)
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // $$ colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 
@@ -1182,7 +1187,7 @@ private:
         depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 
-        // $$
+        // 이제 렌더 패스는 멀티샘플링된 컬러 이미지를 일반 어태치먼트로 해석하도록 지시해야 합니다. resolve 타겟으로 사용할 색상 버퍼를 가리키는 새 어태치먼트 참조를 만듭니다.
         VkAttachmentDescription colorAttachmentResolve{};
         colorAttachmentResolve.format = swapChainImageFormat;
         colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1226,7 +1231,7 @@ private:
         // pDepthStencilAttachment : 깊이 및 스텐실 데이터에 대한 어태치먼트
         // pPreserveAttachments : 이 서브패스에서 사용하지 않지만 데이터를 보존해야 하는 어태치먼트
         subpass.pDepthStencilAttachment = &depthAttachmentRef; // 유일하게 존재하는 서브패스 하나에 대해 깊이 어태치먼트 참조를 추가합니다.
-        subpass.pResolveAttachments = &colorAttachmentResolveRef; // $$
+        subpass.pResolveAttachments = &colorAttachmentResolveRef; // pResolveAttachments 서브패스 구조체 멤버가 새로 생성된 참조 어태치먼트를 가리키도록 설정합니다. 이것만 작성해도 렌더 패스가 이미지를 화면에 렌더링할 수 있는 다중 샘플 resolve 작업을 정의하도록 하기에 충분합니다.
 
 
         // 서브패스 종속성 설정
@@ -1244,8 +1249,8 @@ private:
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         
 
-        // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다. 컬러 어태치먼트와 다르게 서브패스는 단일 깊이(+스텐실) 어태치먼트만 사용할 수 있습니다. 여러 버퍼에서 깊이 테스트를 수행하는 것은 사실상 의미가 없기 때문입니다. 추가로 두 어태치먼트들을 모두 보관하고 참조할 수 있도록 VkRenderPassCreateInfo 구조체를 업데이트 하였습니다.
-        std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve }; // $$
+        // 그런 다음 VkRenderPassCreateInfo 구조를 어태치먼트 및 서브패스의 배열로 채워서 렌더 패스 개체를 생성할 수 있습니다. VkAttachmentReference 개체는 이 배열의 인덱스를 사용하여 어태치먼트를 참조합니다. 컬러 어태치먼트와 다르게 서브패스는 단일 깊이(+스텐실) 어태치먼트만 사용할 수 있습니다. 여러 버퍼에서 깊이 테스트를 수행하는 것은 사실상 의미가 없기 때문입니다. 추가로 두 어태치먼트들을 모두 보관하고 참조할 수 있도록 VkRenderPassCreateInfo 구조체를 업데이트 하였습니다. 이제 새로운 색상 어태치먼트로 렌더 패스 정보 구조체를 업데이트합니다.
+        std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1440,8 +1445,8 @@ private:
         // VkPipelineMultisampleStateCreateInfo 구조체는 안티앨리어싱을 수행하는 방법 중 하나인 멀티샘플링을 구성합니다. 동일한 픽셀에서 여러 다각형의 프레그먼트 셰이더 결과를 결합하여 작동합니다. 이것은 주로 가장 눈에 띄는 앨리어싱 아티팩트가 발생하는 가장자리 계단 현상을 해결합니다. 하나의 폴리곤만 픽셀에 매핑되는 경우 프래그먼트 셰이더를 여러 번 실행할 필요가 없기 때문에 단순히 더 높은 해상도로 렌더링한 다음 축소하는 것보다 훨씬 저렴합니다. 활성화하려면 GPU 기능을 활성화해야 합니다. 지금은 비활성화 상태로 둡니다.
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = msaaSamples; // $$ multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisampling.sampleShadingEnable = VK_TRUE; // 샘플 셰이딩을 활성화합니다 - https://vulkan-tutorial.com/Multisampling | enable sample shading in the pipeline
+        multisampling.rasterizationSamples = msaaSamples; // 마지막으로 createGraphicsPipeline을 수정하여 새로 생성된 파이프라인에 두 개 이상의 샘플을 사용하도록 지시합니다. 밉매핑과 마찬가지로 차이점이 바로 나타나지 않을 수 있습니다. 자세히 보면 가장자리가 더 이상 들쭉날쭉하지 않고 전체 이미지가 원본에 비해 약간 더 매끄럽게 보입니다.
         multisampling.minSampleShading = 1.0f; // Optional
         multisampling.pSampleMask = nullptr; // Optional
         multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -1656,10 +1661,13 @@ private:
 
 
     // $$
-    void createColorResources()
+    inline void createColorResources()
     {
+        // 우리 프로그램은 이제 뷰어에서 멀리 떨어진 개체를 렌더링할 때 아티팩트를 교정하기 위해 여러 해상도의 텍스처에 대해 정의하였습니다. 이제 이미지가 훨씬 부드러워졌지만 자세히 살펴보면 기하학적 모양의 가장자리를 따라 톱니 모양의 아티팩트는 여전히 남아있음을 볼 수 있습니다. 이 원치 않는 효과를 "앨리어싱"이라고 하며 렌더링에 사용할 수 있는 픽셀 수가 제한되어 있기 때문입니다. 무한 해상도를 가진 디스플레이는 없기 때문에 가까이 들여다 보면 항상 어느 정도는 볼 수 있습니다. 이 문제를 해결하는 방법에는 여러 가지가 있으며 이 장에서는 가장 인기 있는 방법 중 하나인 MSAA(Multisample anti-aliasing)에 중점을 둘 것입니다. 일반적인 렌더링에서 픽셀 색상은 대부분의 경우 화면에서 대상 픽셀의 중심인 단일 샘플 포인트를 기반으로 결정됩니다. 그려진 선의 일부가 특정 픽셀을 통과하지만 샘플 포인트를 덮지 않는 경우 해당 픽셀은 공백으로 남겨져 들쭉날쭉한 "계단" 효과로 이어집니다. MSAA가 하는 일은 픽셀당 여러 샘플 포인트(이름에 따라)를 사용하여 최종 색상을 결정하는 것입니다. 예상할 수 있듯이 더 많은 샘플이 더 나은 결과로 이어지지만 계산 비용도 더 많이 듭니다. 구현에서는 사용 가능한 최대 샘플 수를 사용하는 데 중점을 둘 것입니다. 응용 프로그램에 따라 이것이 항상 최선의 접근 방식은 아닐 수 있으며 최종 결과가 품질 요구 사항을 충족하는 경우 더 높은 성능을 위해 더 적은 샘플을 사용하는 것이 더 나을 수 있습니다. 
+
         VkFormat colorFormat = swapChainImageFormat;
 
+        // 이제 멀티샘플링된 색상 버퍼를 생성합니다. createColorResources 함수를 추가하고 여기에서 msaaSamples를 createImage에 대한 함수 매개변수로 사용합니다. 또한 픽셀당 샘플이 두 개 이상인 이미지의 경우 Vulkan 스펙의 강제사항으로써 하나의 밉 레벨만 사용해야 합니다. 또한 이 색상 버퍼는 텍스처로 사용되지 않을 것이기 때문에 어차피 밉맵이 필요하지 않습니다.
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
         colorImageView = createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
@@ -1676,7 +1684,7 @@ private:
         // 스텐실 구성 요소는 스텐실 테스트 https://en.wikipedia.org/wiki/Stencil_buffer 에 사용되며, 이는 깊이 테스트와 결합할 수 있는 추가 테스트입니다. 이에 대해서는 다음 장에서 살펴보겠습니다.
         VkFormat depthFormat = findDepthFormat();
 
-        // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다. $$
+        // 이제 createImage 및 createImageView 헬퍼함수를 호출하는 데 필요한 모든 정보가 있습니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다. 이제 멀티샘플링된 색상 버퍼가 준비되었으므로 깊이 버퍼도 처리해야 합니다. 깊이 버퍼에서 사용하는 샘플 수를 msaaSamples 로 업데이트합니다.
         createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
         // 그러나 createImageView 함수는 현재 하위 리소스가 항상 VK_IMAGE_ASPECT_COLOR_BIT 라고 가정하므로 해당 필드를 VK_IMAGE_ASPECT_DEPTH_BIT 로 전환해야 합니다. 깊이 이미지에 밉맵 레벨은 필요 없으므로 1로 설정합니다.
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -1750,7 +1758,7 @@ private:
                 colorImageView,
                 // 색상 어태치먼트는 스왑 체인 이미지마다 다르지만 모든 스왑 체인 이미지에서 동일한 깊이 이미지를 사용할 수 있습니다. 이유는 세마포어로 인해 오직 하나의 서브패스만 동시에 실행되기 때문입니다.
                 depthImageView,
-                swapChainImageViews[i] // $$
+                swapChainImageViews[i] // 멀티샘플링을 위해 추가한 새로운 이미지 뷰들을 추가하였습니다.
             };
 
             // 보시다시피 프레임 버퍼 생성은 매우 간단합니다. 먼저 어떤 렌더패스가 프레임 버퍼와 호환되는지 지정해야 합니다. 해당 렌더패스에 호환되는 프레임 버퍼만 사용할 수 있습니다.
@@ -1873,7 +1881,7 @@ private:
         // usage 필드는 버퍼 생성의 그것과 동일한 의미를 가집니다. 이미지는 버퍼 복사의 대상으로 사용되므로 전송 대상으로 설정해야 합니다. 또한 셰이더에서 이미지에 액세스하여 메시에 색상을 지정할 수 있기를 원하므로 사용에는 VK_IMAGE_USAGE_SAMPLED_BIT가 포함되어야 합니다.
         imageInfo.usage = usage;
         // 샘플 플래그는 멀티샘플링과 관련이 있습니다. 이것은 어태치먼트로 사용할 이미지에만 관련이 있으므로 하나의 샘플을 사용하십시오. 희소 이미지와 관련된 이미지에 대한 몇 가지 선택적 플래그가 있습니다. 희소 이미지는 실제 메모리의 특정 영역만 지원하기 위한 이미지입니다. 예를 들어, 복셀 지형에 3D 텍스처를 사용하는 경우 대량의 "공기" 값을 저장하기 위해 메모리를 할당하여 낭비하는 것을 방지할 수 있습니다. 이 튜토리얼에서는 사용하지 않을 것이므로 기본값인 0으로 두십시오.
-        imageInfo.samples = numSamples; // $$ imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.samples = numSamples; // 새 이미지는 (MSAA 를 위해) 픽셀당 원하는 샘플 수를 저장해야 하므로 이미지 생성 프로세스 중에 이 숫자를 VkImageCreateInfo에 전달해야 합니다. numSamples 매개변수를 추가하여 이를 samples 로 설정합니다.
         imageInfo.flags = 0; // Optional
         // 이미지는 하나의 큐 페밀리, 즉 그래픽(및 그에 따른) 전송 작업을 지원하는 페밀리 하나만 사용할 예정입니다.
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -2779,9 +2787,9 @@ private:
         // 아래가 스왑 체인을 다시 만드는 데 필요한 모든 것입니다! 그러나 이 접근 방식의 단점은 새 스왑 체인을 만들기 전에 모든 렌더링이 중지된다는 것입니다. 이전 스왑 체인에서 이미지에 명령을 그리는 동안 새 스왑 체인을 만들 수 있습니다. VkSwapchainCreateInfoKHR 구조체의 oldSwapChain 필드에 이전 스왑 체인을 전달하고 사용을 마치는 즉시 이전 스왑 체인을 파괴함으로써 새로운 스왑 체인과 자연스럽게 연결시킬 수도 있습니다.
         createSwapChain();
         createImageViews();
-        createColorResources(); // $$
         createRenderPass();
         createGraphicsPipeline();
+        createColorResources(); // 멀티샘플링을 위해 깊이 이미지 말고도 추가로 컬러 이미지도 만들었었습니다.
         createDepthResources();
         createFramebuffers();
     }
@@ -2991,7 +2999,7 @@ private:
         vkDestroyImage(device, depthImage, nullptr);
         vkFreeMemory(device, depthImageMemory, nullptr);
 
-        // $$
+        // 멀티샘플링을 위해 이미지 컬러 이미지도 만들었으므로 모두 정리해야 합니다.
         vkDestroyImageView(device, colorImageView, nullptr);
         vkDestroyImage(device, colorImage, nullptr);
         vkFreeMemory(device, colorImageMemory, nullptr);
